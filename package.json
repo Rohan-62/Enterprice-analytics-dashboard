@@ -1,7 +1,7 @@
 {
   "name": "price-tracking-system",
   "version": "1.0.0",
-  "description": "SKM Animal Feeds and Foods - Price Tracking System",
+  "description": "Analytical Dashboard - Price Tracking System",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,7 +13,7 @@
     "express",
     "postgresql"
   ],
-  "author": "SKM Animal Feeds and Foods",
+  "author": "Analytical Dashboard",
   "license": "MIT",
   "dependencies": {
     "dotenv": "^17.4.2",

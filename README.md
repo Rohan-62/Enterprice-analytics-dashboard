@@ -1,95 +1,59 @@
-# SKM Animal Feeds & Foods — Price Tracking System
+# Price Tracking System — Analytical Dashboard
 
-A production-ready **Electron** desktop application for tracking commodity prices from multiple suppliers with graphical analytics, built for **SKM Animal Feeds and Foods**.
+A production-ready web application for tracking commodity prices from multiple suppliers with graphical analytics. The application provides a robust backend API built with Express.js and PostgreSQL, with a responsive frontend built on HTML, CSS, and Chart.js.
 
----
+## Key Features
 
-## 🚀 Features
+- **Price Entry:** Add daily commodity prices from various suppliers.
+- **Analytics Dashboard:** Graphical charts to analyze price trends over time using Chart.js.
+- **Daily Analysis:** In-depth daily breakdown by product and supplier.
+- **Admin Panel:** Complete CRUD management for Products, Suppliers, and Historical Price Entries.
+- **Role-Based Access Control (RBAC):** Separate user and admin roles.
+- **PostgreSQL Database:** Robust relational database for reliable data storage.
+- **RESTful API:** Clean API layer for frontend-backend communication.
 
-- 📦 **14 Products** pre-loaded (DORB/RBDOC, Soya DOC variants, Maize DOC, GN DOC, Mustard DOC, Cotton DOC, etc.)
-- 🏭 **77 Suppliers** pre-loaded with location metadata across India
-- 💰 **Price Entry** — add, edit, and delete daily prices per product per supplier
-- 📊 **Interactive Charts** — visualize price trends with Chart.js (filterable by product, supplier, and date range)
-- 📅 **Daily Analysis** — drill-down view to compare supplier prices for a specific product on a given day
-- 🔐 **Role-based Authentication** — Admin and User roles with secure login
-- 🛠️ **Admin Dashboard** — manage products, suppliers, and view all entries with pagination
-- 🐘 **PostgreSQL Database** — all data persisted in a Postgres database (tables auto-created on first run)
+## Tech Stack
 
----
+- **Backend:** Node.js, Express.js
+- **Database:** PostgreSQL
+- **Frontend:** HTML5, CSS3, JavaScript (Vanilla)
+- **Charts:** Chart.js
 
-## 🏗️ Tech Stack
-
-| Layer         | Technology                     |
-|---------------|-------------------------------|
-| Desktop App   | Electron (with Electron Forge)|
-| Backend Logic | Node.js                       |
-| Database      | PostgreSQL (via `pg` module)  |
-| Frontend      | HTML, CSS, JavaScript         |
-| Charts        | Chart.js                      |
-| Build/Package | Electron Forge                |
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-appliaction/
-├── main.js                  # Electron main process (window + IPC handlers)
-├── preload.js               # Secure bridge between main & renderer (contextBridge)
-├── package.json             # Dependencies and scripts
-├── forge.config.js          # Electron Forge build configuration
-├── .env                     # PostgreSQL credentials (DO NOT commit)
-├── .gitignore               # Ignores node_modules, .env
-│
-├── src/
-│   └── database.js          # PostgreSQL database layer (connection, schema, CRUD, seeding)
-│
-├── pages/
-│   ├── login.html           # User login page
-│   ├── index.html           # Main dashboard (price entry + today's prices)
-│   ├── charts.html          # Interactive price trend charts
-│   ├── daily_analysis.html  # Daily supplier-wise price comparison
-│   └── admin/
-│       ├── dashboard.html   # Admin dashboard (entries by date, pagination)
-│       ├── products.html    # Admin: manage products (add/edit/delete)
-│       └── suppliers.html   # Admin: manage suppliers (add/edit/delete)
-│
-├── assets/                  # Icons and static assets
-├── sql/                     # Legacy SQL dump files (historical data)
-├── insertion/               # Legacy SQL insert scripts
-├── data/                    # (Legacy) SQLite database storage
-├── dist/                    # Electron Builder output
-└── out/                     # Electron Forge output
+├── assets/                 # Frontend static assets
+│   ├── css/                # Stylesheets
+│   └── js/                 # API client and main scripts
+├── pages/                  # Frontend HTML pages
+│   └── admin/              # Admin-specific pages
+├── src/                    # Backend source code
+│   └── database.js         # PostgreSQL connection and queries
+├── server.js               # Main Express.js application entry point
+├── package.json            # Node.js dependencies
+└── .env                    # Environment variables (DB credentials)
 ```
 
----
+## Setup Instructions
 
-## ⚙️ Prerequisites
+### 1. Prerequisites
 
-- **Node.js** v16+ and **npm**
-- **PostgreSQL** v12+ (running locally or remotely)
-- A database created in PostgreSQL (e.g., `price_tracking`)
+- **Node.js** (v14 or higher)
+- **PostgreSQL** (v12 or higher)
 
----
+### 2. Installation
 
-## 🔧 Setup & Installation
-
-### 1. Clone the Repository
+Clone the repository and install the Node.js dependencies:
 
 ```bash
-git clone <your-repo-url>
-cd appliaction
-```
-
-### 2. Install Dependencies
-
-```bash
+git clone <repository_url>
+cd price-tracking-system
 npm install
 ```
 
-### 3. Configure Environment
+### 3. Database Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the root directory and configure your PostgreSQL database connection:
 
 ```env
 DB_USER=postgres
@@ -99,97 +63,28 @@ DB_PASSWORD=your_password
 DB_PORT=5432
 ```
 
-### 4. Create the Database
+Ensure the PostgreSQL server is running and the database specified in `.env` exists. The application will automatically create the necessary tables and seed default data on the first run.
 
-Using `psql` or pgAdmin:
+### 4. Running the Application
 
-```sql
-CREATE DATABASE price_tracking;
-```
-
-> **Note:** The application will automatically create all tables (`products`, `suppliers`, `prices`, `users`) and seed them with initial data on first run.
-
-### 5. Run the Application
+Start the Express server:
 
 ```bash
 npm start
 ```
 
----
+The server will start running at `http://localhost:3000`. 
+Open `http://localhost:3000` in your web browser to access the application login page.
 
-## 🔑 Default Login Credentials
+### 5. Default Credentials
 
-| Username | Password  | Role  |
-|----------|-----------|-------|
-| admin    | admin123  | Admin |
-| user     | user123   | User  |
+- **Admin User:**
+  - Username: `admin`
+  - Password: `admin123`
+- **Standard User:**
+  - Username: `user`
+  - Password: `user123`
 
-> ⚠️ **Change these in production!**
-
----
-
-## 📊 Database Schema
-
-### `products`
-| Column      | Type      | Description          |
-|-------------|-----------|----------------------|
-| id          | SERIAL PK | Auto-increment ID    |
-| name        | TEXT      | Product name (unique) |
-| created_at  | TIMESTAMP | Creation timestamp    |
-
-### `suppliers`
-| Column      | Type      | Description          |
-|-------------|-----------|----------------------|
-| id          | SERIAL PK | Auto-increment ID    |
-| name        | TEXT      | Supplier name        |
-| location    | TEXT      | Supplier location    |
-| created_at  | TIMESTAMP | Creation timestamp    |
-
-### `prices`
-| Column      | Type      | Description              |
-|-------------|-----------|--------------------------|
-| id          | SERIAL PK | Auto-increment ID        |
-| product_id  | INTEGER   | FK → products(id)        |
-| supplier_id | INTEGER   | FK → suppliers(id)       |
-| price       | REAL      | Price value              |
-| entry_date  | DATE      | Date of the price entry  |
-| created_at  | TIMESTAMP | Creation timestamp        |
-
-### `users`
-| Column      | Type      | Description          |
-|-------------|-----------|----------------------|
-| id          | SERIAL PK | Auto-increment ID    |
-| username    | TEXT      | Username (unique)    |
-| password    | TEXT      | SHA-256 hashed       |
-| role        | TEXT      | `admin` or `user`    |
-| created_at  | TIMESTAMP | Creation timestamp    |
-
----
-
-## 🔒 Security Features
-
-- SHA-256 password hashing
-- Parameterized queries (prevents SQL injection)
-- Context isolation in Electron (`contextBridge`)
-- `.env` file for credentials (excluded from Git)
-- Role-based access control (Admin vs User)
-
----
-
-## 📦 Building for Production
-
-```bash
-# Package the app
-npm run package
-
-# Create distributable installer
-npm run make
-```
-
-Output will be in the `out/` directory.
-
----
-
-## 📄 License
+## License
 
 MIT License
