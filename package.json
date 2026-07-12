@@ -4,8 +4,11 @@
   "description": "Analytical Dashboard - Price Tracking System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server/server.js",
+    "server": "node server/server.js",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "build": "npm run build --prefix client"
   },
   "keywords": [
     "price-tracking",
@@ -16,8 +19,11 @@
   "author": "Analytical Dashboard",
   "license": "MIT",
   "dependencies": {
+    "concurrently": "^10.0.3",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.22.0"
   }
 }

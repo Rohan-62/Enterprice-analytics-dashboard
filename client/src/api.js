@@ -1,11 +1,14 @@
-// API bridge - replaces Electron's preload.js IPC with fetch-based HTTP calls
-// Provides the same window.api interface so all page logic works unchanged
-
-const API_BASE = window.location.origin + '/api';
+const API_BASE = 'http://localhost:3000/api';
 
 async function apiCall(url, options = {}) {
+    const token = sessionStorage.getItem('jwt_token');
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+
     const response = await fetch(API_BASE + url, {
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         ...options
     });
     if (!response.ok) {
@@ -14,7 +17,7 @@ async function apiCall(url, options = {}) {
     return response.json();
 }
 
-window.api = {
+const api = {
     // Products
     getProducts: () => apiCall('/products'),
     addProduct: (name) => apiCall('/products', {
@@ -69,3 +72,5 @@ window.api = {
     }),
     getEntriesByDate: (date, page, limit) => apiCall(`/entries?date=${encodeURIComponent(date || '')}&page=${page || 1}&limit=${limit || 20}`)
 };
+
+export default api;

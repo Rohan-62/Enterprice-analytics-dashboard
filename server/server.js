@@ -1,22 +1,19 @@
 const express = require('express');
 const path = require('path');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const Database = require('./src/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-app.use('/pages', express.static(path.join(__dirname, 'pages')));
-
-// Redirect root to login page
-app.get('/', (req, res) => {
-    res.redirect('/pages/login.html');
-});
+// Serve static files from React app (production)
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // Initialize database and start server
 let db;
@@ -26,6 +23,26 @@ async function startServer() {
         db = new Database();
         await db.initialize();
         console.log('Database connected successfully');
+
+        // JWT Middleware
+        const authenticateToken = (req, res, next) => {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader && authHeader.split(' ')[1];
+            
+            if (token == null) return res.status(401).json({ success: false, message: 'Unauthorized: No token provided' });
+
+            jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+                if (err) return res.status(403).json({ success: false, message: 'Forbidden: Invalid token' });
+                req.user = user;
+                next();
+            });
+        };
+
+        // Protect all API routes except login
+        app.use('/api', (req, res, next) => {
+            if (req.path === '/auth/login') return next();
+            authenticateToken(req, res, next);
+        });
 
         // ===== API Routes =====
 
@@ -195,7 +212,17 @@ async function startServer() {
             try {
                 const { username, password } = req.body;
                 const result = await db.userLogin(username, password);
-                res.json(result);
+                
+                if (result.success) {
+                    const token = jwt.sign(
+                        { id: result.user.id, username: result.user.username, role: result.user.role }, 
+                        process.env.JWT_SECRET, 
+                        { expiresIn: '24h' }
+                    );
+                    res.json({ success: true, user: result.user, token });
+                } else {
+                    res.json(result);
+                }
             } catch (error) {
                 console.error('Error during login:', error);
                 res.status(500).json({ success: false, message: error.message });
@@ -214,10 +241,15 @@ async function startServer() {
             }
         });
 
+        // React Router fallback (must be after all API routes)
+        app.use((req, res) => {
+            res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+        });
+
         // Start listening
         app.listen(PORT, () => {
             console.log(`\n  ✓ Server running at http://localhost:${PORT}`);
-            console.log(`  ✓ Open http://localhost:${PORT}/pages/login.html to access the dashboard\n`);
+            console.log(`  ✓ API available at http://localhost:${PORT}/api`);
         });
 
     } catch (error) {
