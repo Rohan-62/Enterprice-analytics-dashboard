@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Analytical Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <script src="../assets/js/api.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+        }
+        .login-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-wrapper">
+        <div class="card" style="width: 100%; max-width: 400px; padding: 2rem;">
+            <div class="text-center" style="margin-bottom: 2rem;">
+                <h1 style="color: var(--primary); margin-bottom: 0.5rem;">Analytical Dashboard</h1>
+                <p class="page-subtitle">Please enter your credentials to login</p>
+            </div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" class="form-control" id="username" name="username" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+
+                <div id="errorMessage" class="text-center"
+                    style="color: var(--danger); margin-bottom: 16px; display: none;"></div>
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg">Login</button>
+            </form>
+        </div>
+    </div>
+    <footer class="footer text-center" style="padding: 1rem;">
+        <div class="container">
+            <p>&copy; 2026 Analytical Dashboard. All rights reserved.</p>
+        </div>
+    </footer>
+    <script>
+        // Check if already logged in
+        if (sessionStorage.getItem('user_logged_in')) {
+            window.location.href = 'index.html';
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+
+            try {
+                const result = await window.api.userLogin(username, password);
+
+                if (result.success) {
+                    sessionStorage.setItem('user_logged_in', 'true');
+                    sessionStorage.setItem('user_data', JSON.stringify(result.user));
+                    window.location.href = 'index.html';
+                } else {
+                    errorDiv.textContent = 'Invalid username or password';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Login failed. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+
+</html>

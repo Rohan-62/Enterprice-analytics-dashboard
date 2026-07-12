@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Products - SKM Animal Feeds and Foods</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../assets/css/style.css">
+    <script src="../../assets/js/api.js"></script>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="../index.html" class="logo">
+                <span class="logo-text">SKM Animal Feeds and Foods</span>
+            </a>
+            <div class="nav-links">
+                <a href="../index.html" class="nav-link">Home</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="products.html" class="nav-link active">Products</a>
+                <a href="suppliers.html" class="nav-link">Suppliers</a>
+                <a href="#" class="nav-link" onclick="logout()">Logout</a>
+            </div>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Manage Products</h1>
+                <p class="page-subtitle">Add, edit, or delete products</p>
+            </div>
+
+            <!-- Add Product Form -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Add New Product</h3>
+                </div>
+                <form id="addProductForm" class="flex" style="gap: 16px;">
+                    <input type="text" class="form-control" id="newProductName" placeholder="Product name" required
+                        style="flex: 1;">
+                    <button type="submit" class="btn btn-primary">Add Product</button>
+                </form>
+            </div>
+
+            <!-- Products Table -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3 class="card-title">All Products</h3>
+                </div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productsTableBody">
+                            <tr>
+                                <td colspan="3" class="text-center">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Pagination Controls -->
+                <div class="pagination-controls"
+                    style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; align-items: center; padding-bottom: 20px;">
+                    <button id="prevPage" class="btn btn-secondary btn-sm" onclick="changePage(-1)">Previous</button>
+                    <span id="pageInfo" style="font-weight: 500;">Page 1 of 1</span>
+                    <button id="nextPage" class="btn btn-secondary btn-sm" onclick="changePage(1)">Next</button>
+                </div>
+            </div>
+
+            <!-- Edit Modal -->
+            <div class="modal-overlay" id="editProductModal">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3>Edit Product</h3>
+                        <button class="modal-close" onclick="closeModal('editProductModal')">&times;</button>
+                    </div>
+                    <form id="editProductForm">
+                        <input type="hidden" id="editProductId">
+
+                        <div class="form-group">
+                            <label for="editProductName">Product Name</label>
+                            <input type="text" class="form-control" id="editProductName" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 SKM Animal Feeds and Foods. All rights reserved.</p>
+        </div>
+    </footer>
+    <script>
+        // Check authentication
+        if (!sessionStorage.getItem('admin_logged_in')) {
+            window.location.href = 'login.html';
+        }
+
+        let allProducts = [];
+        let currentPage = 1;
+        const itemsPerPage = 20;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadProducts();
+            setupForms();
+        });
+
+        async function loadProducts() {
+            try {
+                allProducts = await window.api.getProducts();
+                currentPage = 1;
+                renderTable();
+            } catch (error) {
+                document.getElementById('productsTableBody').innerHTML = '<tr><td colspan="3" class="text-center text-danger">Error loading products</td></tr>';
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('productsTableBody');
+
+            if (allProducts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center">No products found</td></tr>';
+                updatePagination();
+                return;
+            }
+
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const displayedProducts = allProducts.slice(startIndex, endIndex);
+
+            tbody.innerHTML = displayedProducts.map(p => `
+                <tr>
+                    <td>${p.id}</td>
+                    <td>${escapeHtml(p.name)}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="editProduct(${p.id}, '${escapeHtml(p.name)}')">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(allProducts.length / itemsPerPage) || 1;
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prevPage').disabled = currentPage === 1;
+            document.getElementById('nextPage').disabled = currentPage === totalPages;
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(allProducts.length / itemsPerPage) || 1;
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderTable();
+            }
+        }
+
+        function setupForms() {
+            // Add product form
+            document.getElementById('addProductForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('newProductName').value.trim();
+
+                if (!name) return;
+
+                try {
+                    const result = await window.api.addProduct(name);
+                    if (result.success) {
+                        document.getElementById('newProductName').value = '';
+                        await loadProducts();
+                    } else {
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    alert('Error adding product');
+                }
+            });
+
+            // Edit product form
+            document.getElementById('editProductForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = parseInt(document.getElementById('editProductId').value);
+                const name = document.getElementById('editProductName').value.trim();
+
+                if (!name) return;
+
+                try {
+                    const result = await window.api.updateProduct(id, name);
+                    if (result.success) {
+                        closeModal('editProductModal');
+                        await loadProducts();
+                    } else {
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    alert('Error updating product');
+                }
+            });
+        }
+
+        function editProduct(id, name) {
+            document.getElementById('editProductId').value = id;
+            document.getElementById('editProductName').value = name;
+            openModal('editProductModal');
+        }
+
+        async function deleteProduct(id) {
+            if (!confirm('Are you sure you want to delete this product? This will also delete all associated price entries.')) return;
+
+            try {
+                const result = await window.api.deleteProduct(id);
+                if (result.success) {
+                    await loadProducts();
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error deleting product');
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('admin_logged_in');
+            sessionStorage.removeItem('admin_user');
+            window.location.href = 'login.html';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+    </script>
+</body>
+
+</html>

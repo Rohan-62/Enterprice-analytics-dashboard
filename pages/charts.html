@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - SKM Animal Feeds and Foods</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <script src="../assets/js/api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="index.html" class="logo">
+                <span class="logo-text">SKM Animal Feeds and Foods</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="charts.html" class="nav-link active">Analytics</a>
+                <a href="daily_analysis.html" class="nav-link">Daily Analysis</a>
+                <a href="admin/login.html" class="nav-link btn-nav">Admin Login</a>
+            </div>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Price Analytics</h1>
+                <p class="page-subtitle">Visualize price trends and compare data across products and suppliers</p>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="grid grid-4 summary-stats">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="totalEntries">0</div>
+                        <div class="stat-label">Total Entries</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 7h-9" />
+                            <path d="M14 17H5" />
+                            <circle cx="17" cy="17" r="3" />
+                            <circle cx="7" cy="7" r="3" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="productsTracked">0</div>
+                        <div class="stat-label">Products Tracked</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                            <path
+                                d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="activeSuppliers">0</div>
+                        <div class="stat-label">Active Suppliers</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 3h12" />
+                            <path d="M6 8h12" />
+                            <path d="M11.5 21 16 8" />
+                            <path d="M6 13h3a2 2 0 0 0 0-4H6" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="avgPrice">Rs. 0</div>
+                        <div class="stat-label">Average Price</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Filter Data</h2>
+                        <p class="card-subtitle">Select a product or supplier to view detailed analytics</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-4" style="gap: 20px;">
+                    <div class="form-group">
+                        <label for="startDate">Start Date</label>
+                        <input type="date" class="form-control" id="startDate" onchange="loadAllCharts()">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="endDate">End Date</label>
+                        <input type="date" class="form-control" id="endDate" onchange="loadAllCharts()">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chartProduct">Product</label>
+                        <select class="form-control" id="chartProduct" onchange="loadAllCharts()">
+                            <option value="">-- All Products --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chartSupplier">Supplier</label>
+                        <select class="form-control" id="chartSupplier" onchange="loadAllCharts()">
+                            <option value="">-- All Suppliers --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Line Chart -->
+            <div class="card mt-4 chart-container">
+                <div class="card-header">
+                    <h3 class="card-title" id="lineChartTitle">Price History</h3>
+                    <p class="card-subtitle" id="lineChartSubtitle">Price trends over time</p>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Entries Table -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3 class="card-title">Recent Price Entries</h3>
+                    <p class="card-subtitle">Latest entries matching your filter</p>
+                </div>
+                <div class="table-container">
+                    <table class="table" id="priceTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Product</th>
+                                <th>Supplier</th>
+                                <th>Price</th>
+                            </tr>
+                        </thead>
+                        <tbody id="priceTableBody">
+                            <tr>
+                                <td colspan="4" class="text-center">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 SKM Animal Feeds and Foods. All rights reserved.</p>
+        </div>
+    </footer>
+    <script>
+        let lineChart = null;
+        let products = [];
+        let suppliers = [];
+
+        const chartColors = [
+            '#2563eb', '#0891b2', '#059669', '#d97706', '#dc2626',
+            '#7c3aed', '#db2777', '#0d9488', '#ea580c', '#4f46e5'
+        ];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadInitialData();
+            loadAllCharts();
+        });
+
+        async function loadInitialData() {
+            try {
+                // Load products
+                products = await window.api.getProducts();
+                const productSelect = document.getElementById('chartProduct');
+                products.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    productSelect.appendChild(opt);
+                });
+
+                // Load suppliers
+                suppliers = await window.api.getSuppliers();
+                const supplierSelect = document.getElementById('chartSupplier');
+                suppliers.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = `${s.name} (${s.location})`;
+                    supplierSelect.appendChild(opt);
+                });
+
+                // Load stats
+                const stats = await window.api.getStats();
+                document.getElementById('totalEntries').textContent = stats.prices.toLocaleString();
+                document.getElementById('productsTracked').textContent = stats.products;
+                document.getElementById('activeSuppliers').textContent = stats.suppliers;
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+            }
+        }
+
+        async function loadAllCharts() {
+            const tableBody = document.getElementById('priceTableBody');
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Fetching data...</td></tr>';
+
+            try {
+                const productId = document.getElementById('chartProduct').value;
+                const supplierId = document.getElementById('chartSupplier').value;
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+
+                const filters = {};
+                if (productId) filters.product_id = parseInt(productId);
+                if (supplierId) filters.supplier_id = parseInt(supplierId);
+                if (startDate) filters.start_date = startDate;
+                if (endDate) filters.end_date = endDate;
+
+                const data = await window.api.getPrices(filters);
+
+                if (data && data.length > 0) {
+                    createLineChart(data, productId, supplierId);
+                    updateTable(data.slice(0, 15));
+
+                    document.getElementById('lineChartSubtitle').textContent =
+                        `Showing ${data.length} entries`;
+                    document.getElementById('lineChartTitle').textContent =
+                        getChartTitle(productId, supplierId);
+
+                    // Calculate average
+                    const avg = data.reduce((sum, d) => sum + parseFloat(d.price), 0) / data.length;
+                    document.getElementById('avgPrice').textContent = 'Rs. ' + Math.round(avg).toLocaleString();
+                } else {
+                    clearAllCharts();
+                    document.getElementById('lineChartTitle').textContent = 'No Data Available';
+                    document.getElementById('lineChartSubtitle').textContent = 'Adjust filters to see analytics';
+                    updateTable([]);
+                }
+            } catch (e) {
+                console.error('Error loading charts:', e);
+                if (tableBody) {
+                    tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error: ${e.message}</td></tr>`;
+                }
+            }
+        }
+
+        function getChartTitle(productId, supplierId) {
+            if (productId && supplierId) {
+                const pSelect = document.getElementById('chartProduct');
+                const sSelect = document.getElementById('chartSupplier');
+                return `Analysis: ${pSelect.options[pSelect.selectedIndex].text} - ${sSelect.options[sSelect.selectedIndex].text}`;
+            } else if (productId) {
+                const pSelect = document.getElementById('chartProduct');
+                return `Analysis: ${pSelect.options[pSelect.selectedIndex].text}`;
+            } else if (supplierId) {
+                const sSelect = document.getElementById('chartSupplier');
+                return `Analysis: ${sSelect.options[sSelect.selectedIndex].text}`;
+            }
+            return 'Overall Analysis';
+        }
+
+        function createLineChart(data, productId, supplierId) {
+            const ctx = document.getElementById('lineChart');
+            if (!ctx) return;
+
+            if (lineChart) lineChart.destroy();
+
+            const grouped = {};
+            const dates = new Set();
+
+            data.forEach(item => {
+                const key = productId ? item.supplier_name : item.product_name;
+                if (!grouped[key]) grouped[key] = {};
+                grouped[key][item.entry_date] = parseFloat(item.price);
+                dates.add(item.entry_date);
+            });
+
+            const sortedDates = Array.from(dates).sort();
+            const datasets = Object.keys(grouped).slice(0, 8).map((key, index) => ({
+                label: key,
+                data: sortedDates.map(date => grouped[key][date] || null),
+                borderColor: chartColors[index % chartColors.length],
+                backgroundColor: chartColors[index % chartColors.length] + '20',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                spanGaps: true
+            }));
+
+            lineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedDates.map(d => formatDate(d)),
+                    datasets: datasets
+                },
+                options: getChartOptions('Rs. ')
+            });
+        }
+
+        function getChartOptions(prefix = '') {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: { size: 11 },
+                            boxWidth: 12
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        titleFont: { size: 12 },
+                        bodyFont: { size: 11 },
+                        callbacks: {
+                            label: ctx => {
+                                const value = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
+                                return ctx.dataset.label + ': ' + prefix + parseFloat(value).toFixed(2);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: '#e2e8f0' },
+                        ticks: { font: { size: 10 } }
+                    },
+                    y: {
+                        grid: { color: '#e2e8f0' },
+                        ticks: {
+                            font: { size: 10 },
+                            callback: v => prefix + v
+                        }
+                    }
+                }
+            };
+        }
+
+        function clearAllCharts() {
+            if (lineChart) lineChart.destroy();
+        }
+
+        function updateTable(data) {
+            const tbody = document.getElementById('priceTableBody');
+            if (!tbody) return;
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No price entries found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => `
+                <tr>
+                    <td>${formatDate(item.entry_date)}</td>
+                    <td>${escapeHtml(item.product_name)}</td>
+                    <td>${escapeHtml(item.supplier_name)} (${escapeHtml(item.supplier_location)})</td>
+                    <td>Rs.&nbsp;${parseFloat(item.price).toFixed(2)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-IN', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+
+</html>

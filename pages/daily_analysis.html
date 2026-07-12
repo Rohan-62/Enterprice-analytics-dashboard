@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Analysis - SKM Animal Feeds and Foods</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <script src="../assets/js/api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="index.html" class="logo">
+                <span class="logo-text">SKM Animal Feeds and Foods</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="charts.html" class="nav-link">Analytics</a>
+                <a href="daily_analysis.html" class="nav-link active">Daily Analysis</a>
+                <a href="admin/login.html" class="nav-link btn-nav">Admin Login</a>
+            </div>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="container">
+            <div class="compact-view">
+                <div class="page-header">
+                    <h1 class="page-title">Daily Price Analysis</h1>
+                    <p class="page-subtitle">Compare supplier prices for a selected date</p>
+                </div>
+
+                <!-- Filters -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Select Parameters</h2>
+                            <p class="card-subtitle">Choose a date and product to analyze</p>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="analysisDate">Date</label>
+                            <input type="date" class="form-control" id="analysisDate" onchange="loadDailyChart()">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="analysisProduct">Product</label>
+                            <select class="form-control" id="analysisProduct" onchange="loadDailyChart()">
+                                <option value="">-- Select Product --</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Output -->
+                <div class="grid grid-2" id="analysisResults" style="display: none;">
+                    <!-- Chart -->
+                    <div class="chart-container" style="grid-column: span 2;">
+                        <div class="card-header">
+                            <h3 class="card-title" id="chartTitle">Price Comparison</h3>
+                            <p class="card-subtitle" id="chartSubtitle">Prices by supplier</p>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="dailyChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Lowest Price Highlight -->
+                    <div class="stat-card animate-fade-in" style="grid-column: span 2; justify-content: center;">
+                        <div class="stat-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="stat-value" id="lowestPriceValue">--</div>
+                            <div class="stat-label">Lowest Price Provider</div>
+                            <div class="text-sm text-gray-500" id="lowestProviderName">Select a product to see details
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Price Entries Table -->
+                <div class="card mt-4" id="entriesTableCard" style="display: none;">
+                    <div class="card-header">
+                        <h3 class="card-title">Daily Entries</h3>
+                        <p class="card-subtitle">Detailed list of prices for the selected date</p>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Product</th>
+                                    <th>Supplier</th>
+                                    <th>Price</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailyEntriesBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-4" id="noDataMessage" style="display: none;">
+                    <div class="card-body text-center py-8">
+                        <h3 class="text-lg font-medium text-gray-900">No Data Available</h3>
+                        <p class="text-gray-500 mt-1">There are no price entries for the selected product on this date.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Edit Modal -->
+                <div class="modal-overlay" id="editPriceModal">
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h3>Edit Price Entry</h3>
+                            <button class="modal-close" onclick="closeModal('editPriceModal')">&times;</button>
+                        </div>
+                        <form id="editForm">
+                            <input type="hidden" name="id" id="editPriceId">
+
+                            <div class="form-group">
+                                <label class="form-label" for="editProductId">Product</label>
+                                <select class="form-control" name="product_id" id="editProductId" required></select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="editSupplierId">Supplier</label>
+                                <select class="form-control" name="supplier_id" id="editSupplierId" required></select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="editPriceValue">Price (Rs.)</label>
+                                <input type="number" class="form-control" name="price" id="editPriceValue" step="0.01"
+                                    min="0" required>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 SKM Animal Feeds and Foods. All rights reserved.</p>
+        </div>
+    </footer>
+    <script>
+        let dailyChart = null;
+        let products = [];
+        let suppliers = [];
+        let currentProductName = '';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadInitialData();
+            setupEditForm();
+
+            // Set today's date
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('analysisDate').value = today;
+        });
+
+        async function loadInitialData() {
+            try {
+                // Load products
+                products = await window.api.getProducts();
+                const productSelect = document.getElementById('analysisProduct');
+                const editProductSelect = document.getElementById('editProductId');
+
+                products.forEach(p => {
+                    const opt1 = document.createElement('option');
+                    opt1.value = p.id;
+                    opt1.textContent = p.name;
+                    productSelect.appendChild(opt1);
+
+                    const opt2 = document.createElement('option');
+                    opt2.value = p.id;
+                    opt2.textContent = p.name;
+                    editProductSelect.appendChild(opt2);
+                });
+
+                // Load suppliers for edit modal
+                suppliers = await window.api.getSuppliers();
+                const editSupplierSelect = document.getElementById('editSupplierId');
+                suppliers.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = `${s.name} (${s.location})`;
+                    editSupplierSelect.appendChild(opt);
+                });
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+            }
+        }
+
+        async function loadDailyChart() {
+            const date = document.getElementById('analysisDate').value;
+            const productId = document.getElementById('analysisProduct').value;
+
+            const resultsContainer = document.getElementById('analysisResults');
+            const noDataContainer = document.getElementById('noDataMessage');
+            const tableCard = document.getElementById('entriesTableCard');
+
+            if (!date || !productId) {
+                resultsContainer.style.display = 'none';
+                noDataContainer.style.display = 'none';
+                tableCard.style.display = 'none';
+                return;
+            }
+
+            try {
+                const result = await window.api.getDailyPrices(date, parseInt(productId));
+                currentProductName = result.product_name;
+
+                if (result.success && result.data.length > 0) {
+                    resultsContainer.style.display = 'grid';
+                    noDataContainer.style.display = 'none';
+                    tableCard.style.display = 'block';
+
+                    createDailyChart(result.data, result.product_name);
+                    updateLowestPrice(result.data);
+                    updateDailyTable(result.data, result.product_name);
+                } else {
+                    resultsContainer.style.display = 'none';
+                    tableCard.style.display = 'none';
+                    noDataContainer.style.display = 'block';
+                    if (dailyChart) dailyChart.destroy();
+                }
+            } catch (error) {
+                console.error('Error fetching daily prices:', error);
+                alert('Failed to load data. Please try again.');
+            }
+        }
+
+        function createDailyChart(data, productName) {
+            const ctx = document.getElementById('dailyChart');
+            if (dailyChart) dailyChart.destroy();
+
+            const labels = data.map(item => item.supplier_name + (item.supplier_location ? ` (${item.supplier_location})` : ''));
+            const prices = data.map(item => parseFloat(item.price));
+
+            const minPrice = Math.min(...prices);
+            const backgroundColors = prices.map(price => price === minPrice ? '#059669' : '#2563eb');
+
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Price (Rs.)',
+                        data: prices,
+                        backgroundColor: backgroundColors,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => 'Rs. ' + parseFloat(ctx.parsed.x).toFixed(2)
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `Price Comparison for ${productName}`,
+                            font: { size: 16 }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#e2e8f0' },
+                            ticks: {
+                                callback: v => 'Rs. ' + v
+                            }
+                        },
+                        y: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateLowestPrice(data) {
+            if (data.length === 0) return;
+
+            const lowest = data[0];
+            document.getElementById('lowestPriceValue').textContent = 'Rs. ' + parseFloat(lowest.price).toFixed(2);
+            document.getElementById('lowestProviderName').textContent = `${lowest.supplier_name} (${lowest.supplier_location})`;
+        }
+
+        function updateDailyTable(data, productName) {
+            const tbody = document.getElementById('dailyEntriesBody');
+            tbody.innerHTML = '';
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatDate(item.entry_date)}</td>
+                    <td>${escapeHtml(productName)}</td>
+                    <td>${escapeHtml(item.supplier_name)} <span style="color:var(--text-muted)">(${escapeHtml(item.supplier_location)})</span></td>
+                    <td>Rs. ${parseFloat(item.price).toFixed(2)}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="editPrice(${item.id}, ${item.product_id}, ${item.supplier_id}, ${item.price})">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deletePrice(${item.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function setupEditForm() {
+            document.getElementById('editForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const data = {
+                    id: parseInt(document.getElementById('editPriceId').value),
+                    product_id: parseInt(document.getElementById('editProductId').value),
+                    supplier_id: parseInt(document.getElementById('editSupplierId').value),
+                    price: parseFloat(document.getElementById('editPriceValue').value)
+                };
+
+                try {
+                    const result = await window.api.updatePrice(data);
+                    if (result.success) {
+                        closeModal('editPriceModal');
+                        await loadDailyChart();
+                    } else {
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    alert('Error updating price entry');
+                }
+            });
+        }
+
+        function editPrice(id, productId, supplierId, price) {
+            document.getElementById('editPriceId').value = id;
+            document.getElementById('editProductId').value = productId;
+            document.getElementById('editSupplierId').value = supplierId;
+            document.getElementById('editPriceValue').value = price;
+            openModal('editPriceModal');
+        }
+
+        async function deletePrice(id) {
+            if (!confirm('Are you sure you want to delete this entry?')) return;
+
+            try {
+                const result = await window.api.deletePrice(id);
+                if (result.success) {
+                    await loadDailyChart();
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error deleting price entry');
+            }
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-IN', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+    </script>
+</body>
+
+</html>
