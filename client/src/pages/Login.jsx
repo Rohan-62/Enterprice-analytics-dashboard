@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
+import { api } from '../api';
 
 function Login() {
     const [username, setUsername] = useState('');
@@ -9,7 +9,7 @@ function Login() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (sessionStorage.getItem('user_logged_in')) {
+        if (localStorage.getItem('token')) {
             navigate('/');
         }
     }, [navigate]);
@@ -19,12 +19,12 @@ function Login() {
         setError('');
 
         try {
-            const result = await api.userLogin(username, password);
+            const result = await api.login(username, password);
 
             if (result.success) {
-                sessionStorage.setItem('jwt_token', result.token);
-                sessionStorage.setItem('user_logged_in', 'true');
-                sessionStorage.setItem('user_data', JSON.stringify(result.user));
+                localStorage.setItem('token', result.token);
+                localStorage.setItem('userRole', result.user.role);
+                window.dispatchEvent(new Event('auth-change'));
                 navigate('/');
             } else {
                 setError('Invalid username or password');

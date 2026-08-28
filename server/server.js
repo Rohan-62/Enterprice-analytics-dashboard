@@ -59,7 +59,7 @@ async function startServer() {
 
         app.post('/api/products', async (req, res) => {
             try {
-                const result = await db.addProduct(req.body.name);
+                const result = await db.addProduct(req.body.name, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error adding product:', error);
@@ -69,7 +69,7 @@ async function startServer() {
 
         app.put('/api/products/:id', async (req, res) => {
             try {
-                const result = await db.updateProduct(req.params.id, req.body.name);
+                const result = await db.updateProduct(req.params.id, req.body.name, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error updating product:', error);
@@ -79,7 +79,7 @@ async function startServer() {
 
         app.delete('/api/products/:id', async (req, res) => {
             try {
-                const result = await db.deleteProduct(req.params.id);
+                const result = await db.deleteProduct(req.params.id, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error deleting product:', error);
@@ -100,7 +100,7 @@ async function startServer() {
 
         app.post('/api/suppliers', async (req, res) => {
             try {
-                const result = await db.addSupplier(req.body.name, req.body.location);
+                const result = await db.addSupplier(req.body.name, req.body.location, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error adding supplier:', error);
@@ -110,7 +110,7 @@ async function startServer() {
 
         app.put('/api/suppliers/:id', async (req, res) => {
             try {
-                const result = await db.updateSupplier(req.params.id, req.body.name, req.body.location);
+                const result = await db.updateSupplier(req.params.id, req.body.name, req.body.location, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error updating supplier:', error);
@@ -120,7 +120,7 @@ async function startServer() {
 
         app.delete('/api/suppliers/:id', async (req, res) => {
             try {
-                const result = await db.deleteSupplier(req.params.id);
+                const result = await db.deleteSupplier(req.params.id, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error deleting supplier:', error);
@@ -135,6 +135,16 @@ async function startServer() {
                 res.json(stats);
             } catch (error) {
                 console.error('Error getting stats:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+        app.get('/api/stats/advanced', async (req, res) => {
+            try {
+                const stats = await db.getAdvancedStats();
+                res.json(stats);
+            } catch (error) {
+                console.error('Error getting advanced stats:', error);
                 res.status(500).json({ error: error.message });
             }
         });
@@ -178,7 +188,7 @@ async function startServer() {
 
         app.post('/api/prices', async (req, res) => {
             try {
-                const result = await db.insertPrice(req.body);
+                const result = await db.insertPrice(req.body, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error inserting price:', error);
@@ -189,7 +199,7 @@ async function startServer() {
         app.put('/api/prices/:id', async (req, res) => {
             try {
                 const data = { ...req.body, id: req.params.id };
-                const result = await db.updatePrice(data);
+                const result = await db.updatePrice(data, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error updating price:', error);
@@ -199,10 +209,22 @@ async function startServer() {
 
         app.delete('/api/prices/:id', async (req, res) => {
             try {
-                const result = await db.deletePrice(req.params.id);
+                const result = await db.deletePrice(req.params.id, req.user);
                 res.json(result);
             } catch (error) {
                 console.error('Error deleting price:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
+        // --- Predictive Analysis ---
+        app.get('/api/predict/:productId', async (req, res) => {
+            try {
+                const daysToPredict = parseInt(req.query.days) || 7;
+                const result = await db.getPredictions(req.params.productId, daysToPredict);
+                res.json(result);
+            } catch (error) {
+                console.error('Error getting predictions:', error);
                 res.status(500).json({ success: false, message: error.message });
             }
         });
@@ -237,6 +259,75 @@ async function startServer() {
                 res.json(result);
             } catch (error) {
                 console.error('Error getting entries:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+        // --- Price Alerts ---
+        app.get('/api/alerts', async (req, res) => {
+            try {
+                const alerts = await db.getAlerts();
+                res.json(alerts);
+            } catch (error) {
+                console.error('Error getting alerts:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+        app.post('/api/alerts', async (req, res) => {
+            try {
+                const { product_id, min_price, max_price } = req.body;
+                const result = await db.addAlert(product_id, min_price, max_price, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error adding alert:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
+        app.delete('/api/alerts/:id', async (req, res) => {
+            try {
+                const result = await db.deleteAlert(req.params.id, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error deleting alert:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
+        app.get('/api/alerts/triggered', async (req, res) => {
+            try {
+                const alerts = await db.getTriggeredAlerts();
+                res.json(alerts);
+            } catch (error) {
+                console.error('Error getting triggered alerts:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+        // --- Search ---
+        app.get('/api/search', async (req, res) => {
+            try {
+                const { q } = req.query;
+                if (!q || q.trim().length < 2) {
+                    return res.json({ products: [], suppliers: [], prices: [] });
+                }
+                const results = await db.search(q.trim());
+                res.json(results);
+            } catch (error) {
+                console.error('Error searching:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+        // --- Audit Logs ---
+        app.get('/api/audit-logs', async (req, res) => {
+            try {
+                const { page, limit } = req.query;
+                const result = await db.getAuditLogs(parseInt(page) || 1, parseInt(limit) || 25);
+                res.json(result);
+            } catch (error) {
+                console.error('Error getting audit logs:', error);
                 res.status(500).json({ error: error.message });
             }
         });

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Package, Truck, Database } from 'lucide-react';
-import api from '../api';
+import { Package, Truck, Database, AlertTriangle, TrendingUp, TrendingDown, ArrowRight, Minus } from 'lucide-react';
+import { api } from '../api';
 
 function Home() {
     const [stats, setStats] = useState({ products: 0, suppliers: 0, prices: 0 });
+    const [advancedStats, setAdvancedStats] = useState(null);
+    const [triggeredAlerts, setTriggeredAlerts] = useState([]);
     const [products, setProducts] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [todayPrices, setTodayPrices] = useState([]);
@@ -21,14 +23,18 @@ function Home() {
 
     const loadData = async () => {
         try {
-            const [statsRes, productsRes, suppliersRes, pricesRes] = await Promise.all([
+            const [statsRes, advStatsRes, alertsRes, productsRes, suppliersRes, pricesRes] = await Promise.all([
                 api.getStats(),
+                api.getAdvancedStats(),
+                api.getTriggeredAlerts(),
                 api.getProducts(),
                 api.getSuppliers(),
                 api.getTodayPrices()
             ]);
             
             setStats(statsRes);
+            setAdvancedStats(advStatsRes);
+            setTriggeredAlerts(alertsRes);
             setProducts(productsRes);
             setSuppliers(suppliersRes);
             setTodayPrices(pricesRes);
@@ -118,29 +124,76 @@ function Home() {
                 <p className="page-subtitle">Track product prices from various suppliers</p>
             </div>
 
-            <div className="grid grid-3 summary-stats">
-                <div className="stat-card">
-                    <div className="stat-icon"><Package size={28} /></div>
-                    <div>
-                        <div className="stat-value">{stats.products || 0}</div>
-                        <div className="stat-label">Products</div>
+            {triggeredAlerts.length > 0 && (
+                <div className="alert-banner">
+                    <div className="alert-banner-title">
+                        <AlertTriangle size={20} />
+                        Price Threshold Alerts Triggered ({triggeredAlerts.length})
+                    </div>
+                    {triggeredAlerts.slice(0, 3).map(alert => (
+                        <div key={alert.alert_id} className="alert-banner-item">
+                            <div>
+                                <strong>{alert.product_name}</strong> from {alert.supplier_name}
+                                <span style={{ margin: '0 8px', color: 'var(--text-muted)' }}>|</span>
+                                {alert.entry_date}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>
+                                    ₹{alert.alert_type === 'ABOVE_MAX' ? alert.threshold_max : alert.threshold_min}
+                                </span>
+                                <ArrowRight size={14} />
+                                <strong style={{ fontSize: '1.1rem' }}>₹{alert.price}</strong>
+                            </div>
+                        </div>
+                    ))}
+                    {triggeredAlerts.length > 3 && (
+                        <div style={{ marginTop: '8px', fontSize: '0.85rem', textAlign: 'center', color: 'var(--danger)' }}>
+                            + {triggeredAlerts.length - 3} more alerts active
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {advancedStats && (
+                <div className="insights-grid">
+                    <div className="insight-card">
+                        <div className="insight-label">Market Avg (7 Days)</div>
+                        <div className="insight-value">₹{advancedStats.avg_price_this_week.toFixed(2)}</div>
+                        <div className={`insight-trend ${advancedStats.week_over_week_change > 0 ? 'trend-up' : advancedStats.week_over_week_change < 0 ? 'trend-down' : 'trend-neutral'}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {advancedStats.week_over_week_change > 0 ? <TrendingUp size={14} /> : advancedStats.week_over_week_change < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+                            {Math.abs(advancedStats.week_over_week_change)}% vs last week
+                        </div>
+                    </div>
+                    
+                    <div className="insight-card">
+                        <div className="insight-label">Most Volatile Product</div>
+                        <div className="insight-value" style={{ fontSize: '1.2rem' }}>
+                            {advancedStats.volatility[0]?.product_name || 'N/A'}
+                        </div>
+                        <div className="insight-trend trend-neutral">
+                            Standard Deviation: ₹{advancedStats.volatility[0]?.volatility || 0}
+                        </div>
+                    </div>
+
+                    <div className="insight-card">
+                        <div className="insight-label">Cheapest Supplier</div>
+                        <div className="insight-value" style={{ fontSize: '1.2rem' }}>
+                            {advancedStats.cheapest_suppliers[0]?.supplier_name || 'N/A'}
+                        </div>
+                        <div className="insight-trend trend-down">
+                            Avg Price: ₹{advancedStats.cheapest_suppliers[0]?.avg_price || 0}
+                        </div>
+                    </div>
+
+                    <div className="insight-card">
+                        <div className="insight-label">Entries This Week</div>
+                        <div className="insight-value">{advancedStats.entries_this_week}</div>
+                        <div className="insight-trend trend-neutral">
+                            Total System DB: {stats.prices}
+                        </div>
                     </div>
                 </div>
-                <div className="stat-card">
-                    <div className="stat-icon"><Truck size={28} /></div>
-                    <div>
-                        <div className="stat-value">{stats.suppliers || 0}</div>
-                        <div className="stat-label">Suppliers</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon"><Database size={28} /></div>
-                    <div>
-                        <div className="stat-value">{(stats.prices || 0).toLocaleString()}</div>
-                        <div className="stat-label">Price Entries</div>
-                    </div>
-                </div>
-            </div>
+            )}
 
             <div className="card mt-4 price-form">
                 <div className="card-header text-center">

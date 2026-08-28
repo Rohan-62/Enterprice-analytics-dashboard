@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import api from '../../api';
+import { api } from '../../api';
 
 function Suppliers() {
     const [suppliers, setSuppliers] = useState([]);

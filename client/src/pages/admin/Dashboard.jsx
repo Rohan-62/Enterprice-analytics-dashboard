@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import api from '../../api';
+import { api } from '../../api';
 
 function Dashboard() {
     const [entries, setEntries] = useState([]);
@@ -47,7 +47,7 @@ function Dashboard() {
                 <p className="page-subtitle">Manage all system data, products, and suppliers</p>
             </div>
 
-            <div className="grid grid-3 mb-4">
+            <div className="grid grid-3 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                 <NavLink to="/admin/products" className="card text-center" style={{ textDecoration: 'none', display: 'block' }}>
                     <h3 className="card-title">Manage Products</h3>
                     <div className="stat-value mt-4">{stats.products}</div>
@@ -60,6 +60,14 @@ function Dashboard() {
                     <h3 className="card-title">Total Price Entries</h3>
                     <div className="stat-value mt-4">{stats.prices.toLocaleString()}</div>
                 </div>
+                <NavLink to="/admin/alerts" className="card text-center" style={{ textDecoration: 'none', display: 'block', border: '1px solid var(--warning)' }}>
+                    <h3 className="card-title" style={{ color: 'var(--warning)' }}>Manage Alerts</h3>
+                    <div className="card-subtitle mt-2">Price Threshold Rules</div>
+                </NavLink>
+                <NavLink to="/admin/audit-log" className="card text-center" style={{ textDecoration: 'none', display: 'block', border: '1px solid var(--accent)' }}>
+                    <h3 className="card-title" style={{ color: 'var(--accent)' }}>Audit Log</h3>
+                    <div className="card-subtitle mt-2">View System Activity</div>
+                </NavLink>
             </div>
 
             <div className="card">

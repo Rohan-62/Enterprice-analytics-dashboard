@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import api from '../api';
+import { api } from '../api';
+import ReportExport from '../components/ReportExport';
 
 function DailyAnalysis() {
     const [products, setProducts] = useState([]);
@@ -95,9 +96,12 @@ function DailyAnalysis() {
             {analysisData.length > 0 && !loading && (
                 <>
                     <div className="card mt-4">
-                        <div className="card-header text-center">
-                            <h3 className="card-title">Analysis for {productName}</h3>
-                            <p className="card-subtitle">{new Date(filters.date).toLocaleDateString('en-IN')}</p>
+                        <div className="card-header flex flex-between flex-center">
+                            <div>
+                                <h3 className="card-title">Analysis for {productName}</h3>
+                                <p className="card-subtitle">{new Date(filters.date).toLocaleDateString('en-IN')}</p>
+                            </div>
+                            <ReportExport data={analysisData} filename={`Daily_Analysis_${productName}_${filters.date}`} />
                         </div>
                         
                         <div className="grid grid-3 summary-stats" style={{ marginBottom: 0 }}>

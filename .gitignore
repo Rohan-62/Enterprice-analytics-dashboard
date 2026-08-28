@@ -1,5 +1,22 @@
-node_modules
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Environment Variables
 .env
+.env.local
+.env.*.local
+
+# Production Build
 dist/
 out/
+client/dist/
+
+# Database / Scratch data
 data/
+*.sqlite
+*.log
+
+# OS Metadata
+.DS_Store
+Thumbs.db
