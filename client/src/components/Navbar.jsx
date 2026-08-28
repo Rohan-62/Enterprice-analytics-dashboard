@@ -1,6 +1,6 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, LogOut, Settings } from 'lucide-react';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { TrendingUp, LogOut, Settings, BarChart2, Calendar } from 'lucide-react';
 import SearchBar from './SearchBar';
 import ThemeToggle from './ThemeToggle';
 
@@ -16,38 +16,56 @@ const Navbar = ({ isAuthenticated, setIsAuthenticated, isAdmin }) => {
 
     return (
         <nav className="navbar">
-            <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Link to="/" className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 'max-content' }}>
-                    <BarChart3 size={24} color="var(--primary)" />
-                    PriceTracker Pro
+            <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                <Link to="/" className="navbar-brand">
+                    <div style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.35)'
+                    }}>
+                        <TrendingUp size={20} color="white" />
+                    </div>
+                    <span>PriceTracker<span style={{ color: '#3b82f6' }}>.</span></span>
                 </Link>
 
                 {isAuthenticated && (
-                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center', margin: '0 24px' }}>
+                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: '400px' }}>
                         <SearchBar />
                     </div>
                 )}
 
-                <div className="navbar-menu" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div className="navbar-menu">
                     {isAuthenticated ? (
                         <>
-                            <Link to="/daily-analysis" className="navbar-link">Daily Analysis</Link>
-                            <Link to="/analytics" className="navbar-link">Analytics</Link>
-                            <Link to="/predictive-analysis" className="navbar-link">Predictions</Link>
+                            <NavLink to="/daily-analysis" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+                                <Calendar size={15} /> Daily Analysis
+                            </NavLink>
+                            <NavLink to="/analytics" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+                                <BarChart2 size={15} /> Analytics
+                            </NavLink>
+                            <NavLink to="/predictive-analysis" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+                                <TrendingUp size={15} /> Predictions
+                            </NavLink>
                             {isAdmin && (
-                                <Link to="/admin" className="navbar-link" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Settings size={16} /> Admin
-                                </Link>
+                                <NavLink to="/admin" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+                                    <Settings size={15} /> Admin
+                                </NavLink>
                             )}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderLeft: '1px solid var(--border)', paddingLeft: '16px', marginLeft: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderLeft: '1px solid var(--border)', paddingLeft: '14px', marginLeft: '6px' }}>
                                 <ThemeToggle />
-                                <button onClick={handleLogout} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}>
-                                    <LogOut size={16} /> Logout
+                                <button onClick={handleLogout} className="btn btn-secondary btn-sm" title="Log Out">
+                                    <LogOut size={15} /> Logout
                                 </button>
                             </div>
                         </>
                     ) : (
-                        <Link to="/login" className="btn btn-primary">Login</Link>
+                        <Link to="/login" className="btn btn-primary btn-sm">Login</Link>
                     )}
                 </div>
             </div>

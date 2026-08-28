@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { TrendingUp, TrendingDown, Activity, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, AlertCircle, Sparkles, Filter } from 'lucide-react';
 import { api } from '../api';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 function PredictiveAnalysis() {
     const [products, setProducts] = useState([]);
@@ -40,7 +40,7 @@ function PredictiveAnalysis() {
                 const data = await api.getPredictions(selectedProduct, 7);
                 
                 if (!data.success) {
-                    setError(data.message || 'Failed to generate predictions.');
+                    setError(data.message || 'Not enough historical data to generate reliable predictions. Please add more daily quotes.');
                     setChartData(null);
                     setKpis(null);
                     return;
@@ -66,21 +66,27 @@ function PredictiveAnalysis() {
                     labels: allDates,
                     datasets: [
                         {
-                            label: 'Historical Average Price',
+                            label: 'Historical Avg Price (₹)',
                             data: historicalPrices.concat(new Array(data.predictions.length).fill(null)),
-                            borderColor: '#2563eb',
-                            backgroundColor: 'rgba(37, 99, 235, 0.5)',
-                            tension: 0.1,
-                            borderWidth: 2,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.3,
+                            borderWidth: 2.5,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            fill: true,
                         },
                         {
-                            label: 'Predicted Price (7 Days)',
+                            label: 'Predicted Trend (Next 7 Days)',
                             data: futurePrices,
-                            borderColor: '#ea580c',
-                            backgroundColor: 'rgba(234, 88, 12, 0.5)',
-                            borderDash: [5, 5],
-                            tension: 0.1,
-                            borderWidth: 2,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderDash: [6, 6],
+                            tension: 0.3,
+                            borderWidth: 2.5,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            fill: true,
                         }
                     ]
                 };
@@ -106,7 +112,7 @@ function PredictiveAnalysis() {
 
             } catch (err) {
                 console.error('Failed to load predictions', err);
-                setError('Failed to fetch prediction data. Check the server.');
+                setError('Failed to fetch prediction model output. Check backend connection.');
             } finally {
                 setLoading(false);
             }
@@ -117,16 +123,26 @@ function PredictiveAnalysis() {
 
     return (
         <div className="container">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Predictive Analysis</h1>
-                <div style={{ display: 'flex', gap: '16px' }}>
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                    <h1 className="page-title">
+                        <Sparkles size={28} color="#3b82f6" />
+                        Predictive Price Forecasting
+                    </h1>
+                    <p className="page-subtitle">Linear regression price modeling based on 30-day historical trading velocity</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <label htmlFor="product-select" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        Select Commodity:
+                    </label>
                     <select 
+                        id="product-select"
                         className="form-control"
                         value={selectedProduct}
                         onChange={(e) => setSelectedProduct(e.target.value)}
-                        style={{ width: '250px' }}
+                        style={{ minWidth: '240px' }}
                     >
-                        <option value="" disabled>Select a product...</option>
+                        <option value="" disabled>Choose a product...</option>
                         {products.map(p => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
@@ -135,57 +151,67 @@ function PredictiveAnalysis() {
             </div>
 
             {error && (
-                <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid var(--danger)', backgroundColor: 'var(--bg-secondary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <AlertCircle color="var(--danger)" />
-                        <p style={{ margin: 0, color: 'var(--text-primary)' }}>{error}</p>
+                <div className="alert-box" style={{ marginBottom: '24px' }}>
+                    <AlertCircle size={20} style={{ flexShrink: 0 }} />
+                    <div>
+                        <strong>Notice:</strong> {error}
                     </div>
                 </div>
             )}
 
             {kpis && !error && (
-                <div className="stats-grid" style={{ marginBottom: '24px' }}>
+                <div className="stats-grid">
                     <div className="stat-card">
                         <div className="stat-header">
                             <h3>Current Avg Price</h3>
-                            <Activity size={20} color="var(--primary)" />
+                            <Activity size={18} color="var(--accent)" />
                         </div>
                         <p className="stat-value">₹{kpis.currentPrice.toFixed(2)}</p>
-                        <p className="stat-subtitle">Based on latest historical data</p>
+                        <p className="stat-subtitle">Latest recorded spot price</p>
                     </div>
                     <div className="stat-card">
                         <div className="stat-header">
-                            <h3>Predicted Price (Day 7)</h3>
-                            <Activity size={20} color="var(--warning)" />
+                            <h3>Forecast Price (Day +7)</h3>
+                            <Sparkles size={18} color="var(--warning)" />
                         </div>
-                        <p className="stat-value">₹{kpis.lastPredictedPrice.toFixed(2)}</p>
-                        <p className="stat-subtitle">Expected value in 7 days</p>
+                        <p className="stat-value" style={{ color: 'var(--warning)' }}>₹{kpis.lastPredictedPrice.toFixed(2)}</p>
+                        <p className="stat-subtitle">Projected benchmark value</p>
                     </div>
                     <div className="stat-card">
                         <div className="stat-header">
-                            <h3>Expected Trend</h3>
+                            <h3>Estimated Trajectory</h3>
                             {kpis.change >= 0 ? (
-                                <TrendingUp size={20} color="var(--success)" />
+                                <TrendingUp size={18} color="var(--success)" />
                             ) : (
-                                <TrendingDown size={20} color="var(--danger)" />
+                                <TrendingDown size={18} color="var(--danger)" />
                             )}
                         </div>
                         <p className="stat-value" style={{ color: kpis.change >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                             {kpis.change >= 0 ? '+' : ''}{kpis.percentChange}%
                         </p>
-                        <p className="stat-subtitle">Over the next 7 days</p>
+                        <p className="stat-subtitle">Projected 7-day movement</p>
                     </div>
                 </div>
             )}
 
-            <div className="card" style={{ minHeight: '400px' }}>
-                <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Price Forecast (30 Days Historical + 7 Days Predicted)</h2>
+            <div className="card">
+                <div className="card-header flex flex-between flex-center">
+                    <div>
+                        <h2 className="card-title">Forecast Trajectory Chart</h2>
+                        <p className="card-subtitle">Comparing historical velocity vs 7-day linear projection</p>
+                    </div>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '4px 12px', background: 'var(--accent-subtle)', borderRadius: '9999px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent)' }}>
+                        <Activity size={14} /> AI Regression Active
+                    </div>
+                </div>
+                
                 {loading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
-                        <p style={{ color: 'var(--text-secondary)' }}>Loading prediction model...</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '340px', gap: '12px' }}>
+                        <Activity size={32} color="var(--accent)" style={{ animation: 'spin 1.5s linear infinite' }} />
+                        <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Calculating predictive regression curve...</p>
                     </div>
                 ) : chartData ? (
-                    <div style={{ height: '400px', width: '100%' }}>
+                    <div className="chart-wrapper">
                         <Line 
                             data={chartData} 
                             options={{ 
@@ -195,11 +221,38 @@ function PredictiveAnalysis() {
                                     mode: 'index',
                                     intersect: false,
                                 },
+                                plugins: {
+                                    legend: {
+                                        position: 'top',
+                                        labels: {
+                                            boxWidth: 12,
+                                            usePointStyle: true,
+                                            font: {
+                                                family: 'Plus Jakarta Sans',
+                                                weight: 600,
+                                                size: 12
+                                            }
+                                        }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (item) => `${item.dataset.label}: ₹${parseFloat(item.parsed.y).toFixed(2)}`
+                                        }
+                                    }
+                                },
                                 scales: {
                                     y: {
                                         beginAtZero: false,
+                                        grid: {
+                                            color: 'rgba(148, 163, 184, 0.1)'
+                                        },
                                         ticks: {
                                             callback: (value) => '₹' + value
+                                        }
+                                    },
+                                    x: {
+                                        grid: {
+                                            display: false
                                         }
                                     }
                                 }
@@ -209,7 +262,7 @@ function PredictiveAnalysis() {
                 ) : (
                     !error && (
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
-                            <p style={{ color: 'var(--text-secondary)' }}>Select a product to view predictions.</p>
+                            <p style={{ color: 'var(--text-muted)' }}>Select a commodity product from above to view predictions.</p>
                         </div>
                     )
                 )}
