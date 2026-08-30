@@ -4,13 +4,21 @@ const crypto = require('crypto');
 
 class AppDatabase {
     constructor() {
-        this.pool = new Pool({
-            user: process.env.DB_USER || 'postgres',
-            host: process.env.DB_HOST || 'localhost',
-            database: process.env.DB_DATABASE || 'price_tracking',
-            password: process.env.DB_PASSWORD || 'postgres',
-            port: process.env.DB_PORT || 5432,
-        });
+        const poolConfig = process.env.DATABASE_URL
+            ? {
+                connectionString: process.env.DATABASE_URL,
+                ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false }
+            }
+            : {
+                user: process.env.DB_USER || 'postgres',
+                host: process.env.DB_HOST || 'localhost',
+                database: process.env.DB_DATABASE || 'price_tracking',
+                password: process.env.DB_PASSWORD || 'postgres',
+                port: parseInt(process.env.DB_PORT, 10) || 5432,
+                ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+            };
+
+        this.pool = new Pool(poolConfig);
     }
 
     async initialize() {

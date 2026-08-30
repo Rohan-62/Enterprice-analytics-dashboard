@@ -1,0 +1,22 @@
+databases:
+  - name: price-tracking-db
+    databaseName: price_tracking
+    user: postgres
+    plan: free
+
+services:
+  - type: web
+    name: price-tracking-app
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: price-tracking-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
