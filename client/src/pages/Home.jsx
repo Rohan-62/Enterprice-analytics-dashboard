@@ -65,7 +65,8 @@ function Home() {
                 alert('Error: ' + result.message);
             }
         } catch (error) {
-            alert('Error saving price entry');
+            console.error('Error saving price entry:', error);
+            alert('Error saving price entry' + (error.message ? `: ${error.message}` : ''));
         }
     };
 
@@ -77,6 +78,7 @@ function Home() {
                 loadData();
             }
         } catch (error) {
+            console.error('Error deleting price entry:', error);
             alert('Error deleting price entry');
         }
     };
@@ -101,13 +103,14 @@ function Home() {
                 price: parseFloat(editFormData.price)
             });
             if (result.success) {
-                setEditing(false);
+                setEditing(null);
                 loadData();
             } else {
                 alert('Error: ' + result.message);
             }
         } catch (error) {
-            alert('Error updating price entry');
+            console.error('Error updating price entry:', error);
+            alert('Error updating price entry' + (error.message ? `: ${error.message}` : ''));
         }
     };
 

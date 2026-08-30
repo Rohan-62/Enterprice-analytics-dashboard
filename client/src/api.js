@@ -123,7 +123,11 @@ export const api = {
         return response.json();
     },
 
-    async addPrice(data) {
+    async getEntriesByDate(date = '', page = 1, limit = 20) {
+        return this.getEntries(date, page, limit);
+    },
+
+    async insertPrice(data) {
         const response = await fetch(`${API_URL}/prices`, {
             method: 'POST',
             headers: getHeaders(),
@@ -132,11 +136,17 @@ export const api = {
         return response.json();
     },
 
-    async updatePrice(id, data) {
+    async addPrice(data) {
+        return this.insertPrice(data);
+    },
+
+    async updatePrice(idOrData, data) {
+        const id = (idOrData && typeof idOrData === 'object') ? idOrData.id : idOrData;
+        const bodyData = (idOrData && typeof idOrData === 'object') ? idOrData : data;
         const response = await fetch(`${API_URL}/prices/${id}`, {
             method: 'PUT',
             headers: getHeaders(),
-            body: JSON.stringify(data)
+            body: JSON.stringify(bodyData)
         });
         return response.json();
     },
@@ -158,6 +168,10 @@ export const api = {
     async getDailyAnalysis(date, product_id) {
         const response = await fetch(`${API_URL}/prices/daily?date=${date}&product_id=${product_id}`, { headers: getHeaders() });
         return response.json();
+    },
+
+    async getDailyPrices(date, product_id) {
+        return this.getDailyAnalysis(date, product_id);
     },
 
     async getFilteredPrices(filters) {
