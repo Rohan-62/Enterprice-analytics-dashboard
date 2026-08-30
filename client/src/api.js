@@ -241,6 +241,24 @@ export const api = {
         return response.json();
     },
 
+    async addUser(data) {
+        const response = await fetch(`${API_URL}/users`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return response.json();
+    },
+
+    async resetUserPassword(id, password) {
+        const response = await fetch(`${API_URL}/users/${id}/password`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify({ password })
+        });
+        return response.json();
+    },
+
     async deleteUser(id) {
         const response = await fetch(`${API_URL}/users/${id}`, {
             method: 'DELETE',

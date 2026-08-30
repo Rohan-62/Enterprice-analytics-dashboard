@@ -397,6 +397,57 @@ class AppDatabase {
         return { success: true, message: `User ${target.rows[0].username} role changed to ${role}.` };
     }
 
+    async adminCreateUser({ username, password, role }, adminUser) {
+        if (!username || !username.trim()) {
+            return { success: false, message: 'Username is required.' };
+        }
+        if (!password || password.length < 4) {
+            return { success: false, message: 'Password must be at least 4 characters long.' };
+        }
+
+        const trimmedUsername = username.trim();
+        const assignedRole = (role === 'admin') ? 'admin' : 'user';
+
+        // Check if username already exists in this company
+        const userCheck = await this.pool.query(
+            'SELECT id FROM users WHERE company_id = $1 AND LOWER(username) = LOWER($2)',
+            [adminUser.company_id, trimmedUsername]
+        );
+        if (userCheck.rows.length > 0) {
+            return { success: false, message: `Username "${trimmedUsername}" is already registered in this company.` };
+        }
+
+        const hashedPassword = this.hashPassword(password);
+        const userRes = await this.pool.query(
+            'INSERT INTO users (company_id, username, password, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, status',
+            [adminUser.company_id, trimmedUsername, hashedPassword, assignedRole, 'approved']
+        );
+        const newUser = userRes.rows[0];
+
+        await this.logAction(adminUser.id, adminUser.username, 'CREATE_USER', 'user', newUser.id, { username: newUser.username, role: newUser.role, status: 'approved' }, adminUser.company_id);
+
+        return {
+            success: true,
+            message: `User "${newUser.username}" created and activated successfully.`,
+            user: newUser
+        };
+    }
+
+    async adminResetPassword(targetUserId, newPassword, adminUser) {
+        if (!newPassword || newPassword.length < 4) {
+            return { success: false, message: 'New password must be at least 4 characters long.' };
+        }
+
+        const target = await this.pool.query('SELECT username FROM users WHERE id = $1 AND company_id = $2', [targetUserId, adminUser.company_id]);
+        if (target.rows.length === 0) return { success: false, message: 'User not found in your company.' };
+
+        const hashedPassword = this.hashPassword(newPassword);
+        await this.pool.query('UPDATE users SET password = $1 WHERE id = $2 AND company_id = $3', [hashedPassword, targetUserId, adminUser.company_id]);
+        await this.logAction(adminUser.id, adminUser.username, 'PASSWORD_RESET', 'user', targetUserId, { targetUsername: target.rows[0].username }, adminUser.company_id);
+
+        return { success: true, message: `Password for user "${target.rows[0].username}" has been reset successfully.` };
+    }
+
     async deleteCompanyUser(targetUserId, adminUser) {
         if (parseInt(targetUserId, 10) === parseInt(adminUser.id, 10)) {
             return { success: false, message: 'You cannot delete your own administrator account.' };
@@ -408,7 +459,7 @@ class AppDatabase {
         await this.pool.query('DELETE FROM users WHERE id = $1 AND company_id = $2', [targetUserId, adminUser.company_id]);
         await this.logAction(adminUser.id, adminUser.username, 'DELETE_USER', 'user', targetUserId, { targetUsername: target.rows[0].username }, adminUser.company_id);
 
-        return { success: true, message: `User ${target.rows[0].username} removed from company.` };
+        return { success: true, message: `User "${target.rows[0].username}" deleted successfully from your organization.` };
     }
 
     // ==========================================

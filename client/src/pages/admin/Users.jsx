@@ -1,13 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api } from '../../api';
-import { UserCheck, UserX, Trash2, ArrowLeft, Shield, Users as UsersIcon, Clock, CheckCircle2, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { 
+    UserCheck, UserX, Trash2, ArrowLeft, Shield, Users as UsersIcon, 
+    Clock, CheckCircle2, XCircle, AlertCircle, RefreshCw, KeyRound, 
+    UserPlus, Search, X
+} from 'lucide-react';
 
 function Users() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all'); // 'all' | 'pending' | 'approved' | 'rejected'
+    const [searchQuery, setSearchQuery] = useState('');
     const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', message: '' }
+
+    // Modals
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newUsername, setNewUsername] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [newRole, setNewRole] = useState('user');
+    const [addLoading, setAddLoading] = useState(false);
+
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [resetPassword, setResetPassword] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
+
     const currentUsername = localStorage.getItem('username');
 
     const loadUsers = async () => {
@@ -33,14 +51,15 @@ function Users() {
 
     const showFeedback = (type, message) => {
         setFeedback({ type, message });
-        setTimeout(() => setFeedback(null), 4000);
+        setTimeout(() => setFeedback(null), 4500);
     };
 
+    // Status change (Approve, Reject, Revoke)
     const handleStatusChange = async (userId, newStatus, targetUsername) => {
         try {
             const result = await api.updateUserStatus(userId, newStatus);
             if (result.success) {
-                showFeedback('success', `User "${targetUsername}" status set to ${newStatus}.`);
+                showFeedback('success', `User "${targetUsername}" is now ${newStatus}.`);
                 loadUsers();
             } else {
                 showFeedback('error', result.message || 'Failed to update user status.');
@@ -50,6 +69,7 @@ function Users() {
         }
     };
 
+    // Role change
     const handleRoleChange = async (userId, newRole, targetUsername) => {
         try {
             const result = await api.updateUserRole(userId, newRole);
@@ -64,21 +84,71 @@ function Users() {
         }
     };
 
+    // Delete user
     const handleDelete = async (userId, targetUsername) => {
-        if (!window.confirm(`Are you sure you want to permanently remove user "${targetUsername}" from your organization?`)) {
+        if (!window.confirm(`Are you sure you want to permanently delete user "${targetUsername}" from your company? This cannot be undone.`)) {
             return;
         }
 
         try {
             const result = await api.deleteUser(userId);
             if (result.success) {
-                showFeedback('success', `User "${targetUsername}" removed successfully.`);
+                showFeedback('success', `User "${targetUsername}" was deleted successfully.`);
                 loadUsers();
             } else {
-                showFeedback('error', result.message || 'Failed to remove user.');
+                showFeedback('error', result.message || 'Failed to delete user.');
             }
         } catch (error) {
-            showFeedback('error', 'Error removing user.');
+            showFeedback('error', 'Error deleting user.');
+        }
+    };
+
+    // Direct Add User
+    const handleAddUser = async (e) => {
+        e.preventDefault();
+        setAddLoading(true);
+        try {
+            const result = await api.addUser({
+                username: newUsername,
+                password: newPassword,
+                role: newRole
+            });
+            if (result.success) {
+                showFeedback('success', result.message || `User "${newUsername}" added successfully.`);
+                setShowAddModal(false);
+                setNewUsername('');
+                setNewPassword('');
+                setNewRole('user');
+                loadUsers();
+            } else {
+                showFeedback('error', result.message || 'Failed to add user.');
+            }
+        } catch (error) {
+            showFeedback('error', 'Error adding user.');
+        } finally {
+            setAddLoading(false);
+        }
+    };
+
+    // Reset Password
+    const handleResetPassword = async (e) => {
+        e.preventDefault();
+        if (!selectedUser) return;
+        setResetLoading(true);
+        try {
+            const result = await api.resetUserPassword(selectedUser.id, resetPassword);
+            if (result.success) {
+                showFeedback('success', `Password for "${selectedUser.username}" reset successfully.`);
+                setShowPasswordModal(false);
+                setSelectedUser(null);
+                setResetPassword('');
+            } else {
+                showFeedback('error', result.message || 'Failed to reset password.');
+            }
+        } catch (error) {
+            showFeedback('error', 'Error resetting password.');
+        } finally {
+            setResetLoading(false);
         }
     };
 
@@ -87,26 +157,47 @@ function Users() {
     const rejectedCount = users.filter(u => u.status === 'rejected').length;
 
     const filteredUsers = users.filter(u => {
-        if (filter === 'pending') return u.status === 'pending';
-        if (filter === 'approved') return u.status === 'approved';
-        if (filter === 'rejected') return u.status === 'rejected';
+        // Status filter
+        if (filter === 'pending' && u.status !== 'pending') return false;
+        if (filter === 'approved' && u.status !== 'approved') return false;
+        if (filter === 'rejected' && u.status !== 'rejected') return false;
+        
+        // Search query
+        if (searchQuery.trim()) {
+            return u.username.toLowerCase().includes(searchQuery.toLowerCase());
+        }
         return true;
     });
 
     return (
-        <div className="container">
+        <div className="container" style={{ position: 'relative' }}>
             {/* Header */}
-            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                 <div>
                     <NavLink to="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', textDecoration: 'none', marginBottom: '8px', fontSize: '0.88rem', fontWeight: '500' }}>
                         <ArrowLeft size={16} /> Back to Dashboard
                     </NavLink>
-                    <h1 className="page-title">User Approvals & Team Management</h1>
-                    <p className="page-subtitle">Control who can access your company dashboard and manage roles</p>
+                    <h1 className="page-title">Company User Management</h1>
+                    <p className="page-subtitle">Full administrative control: approve, add, modify roles, reset passwords, and remove members</p>
                 </div>
-                <button onClick={loadUsers} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-                </button>
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <button 
+                        onClick={() => setShowAddModal(true)} 
+                        className="btn btn-primary btn-sm"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <UserPlus size={15} /> Add Member
+                    </button>
+                    <button 
+                        onClick={loadUsers} 
+                        className="btn btn-secondary btn-sm" 
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                        title="Refresh user list"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Feedback Alert */}
@@ -190,33 +281,47 @@ function Users() {
                 </div>
             </div>
 
-            {/* Filter Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
-                <button
-                    className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setFilter('all')}
-                >
-                    All Users ({users.length})
-                </button>
-                <button
-                    className={`btn btn-sm ${filter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setFilter('pending')}
-                    style={pendingCount > 0 && filter !== 'pending' ? { borderColor: 'var(--warning)', color: 'var(--warning)' } : {}}
-                >
-                    Pending Approvals {pendingCount > 0 && `(${pendingCount})`}
-                </button>
-                <button
-                    className={`btn btn-sm ${filter === 'approved' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setFilter('approved')}
-                >
-                    Approved ({approvedCount})
-                </button>
-                <button
-                    className={`btn btn-sm ${filter === 'rejected' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setFilter('rejected')}
-                >
-                    Rejected ({rejectedCount})
-                </button>
+            {/* Filter & Search Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                        className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setFilter('all')}
+                    >
+                        All ({users.length})
+                    </button>
+                    <button
+                        className={`btn btn-sm ${filter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setFilter('pending')}
+                        style={pendingCount > 0 && filter !== 'pending' ? { borderColor: 'var(--warning)', color: 'var(--warning)' } : {}}
+                    >
+                        Pending {pendingCount > 0 && `(${pendingCount})`}
+                    </button>
+                    <button
+                        className={`btn btn-sm ${filter === 'approved' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setFilter('approved')}
+                    >
+                        Approved ({approvedCount})
+                    </button>
+                    <button
+                        className={`btn btn-sm ${filter === 'rejected' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setFilter('rejected')}
+                    >
+                        Rejected ({rejectedCount})
+                    </button>
+                </div>
+
+                <div style={{ position: 'relative', width: '220px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                        type="text"
+                        placeholder="Search username..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="form-control"
+                        style={{ paddingLeft: '30px', fontSize: '0.82rem', height: '34px' }}
+                    />
+                </div>
             </div>
 
             {/* Users Table */}
@@ -229,7 +334,7 @@ function Users() {
                                 <th>Role</th>
                                 <th>Status</th>
                                 <th>Joined / Requested</th>
-                                <th style={{ textAlign: 'right' }}>Actions</th>
+                                <th style={{ textAlign: 'right' }}>Admin Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -238,7 +343,7 @@ function Users() {
                             ) : filteredUsers.length === 0 ? (
                                 <tr>
                                     <td colSpan="5" className="text-center" style={{ padding: '30px', color: 'var(--text-muted)' }}>
-                                        {filter === 'pending' ? 'No pending approval requests! All users are up to date.' : 'No users found matching this filter.'}
+                                        {filter === 'pending' ? 'No pending approval requests.' : 'No users match the search criteria.'}
                                     </td>
                                 </tr>
                             ) : (
@@ -341,13 +446,25 @@ function Users() {
                                                         </button>
                                                     )}
 
+                                                    {/* Reset Password Button */}
+                                                    {!isSelf && (
+                                                        <button
+                                                            onClick={() => { setSelectedUser(u); setShowPasswordModal(true); }}
+                                                            className="btn btn-secondary btn-sm"
+                                                            style={{ padding: '5px 8px' }}
+                                                            title="Reset password for this user"
+                                                        >
+                                                            <KeyRound size={13} />
+                                                        </button>
+                                                    )}
+
                                                     {/* Delete user button (except self) */}
                                                     {!isSelf && (
                                                         <button
                                                             onClick={() => handleDelete(u.id, u.username)}
                                                             className="btn btn-danger btn-sm"
                                                             style={{ padding: '5px 8px' }}
-                                                            title="Delete user"
+                                                            title="Permanently delete user"
                                                         >
                                                             <Trash2 size={13} />
                                                         </button>
@@ -362,6 +479,142 @@ function Users() {
                     </table>
                 </div>
             </div>
+
+            {/* Modal: Direct Add User */}
+            {showAddModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '20px'
+                }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '24px', position: 'relative' }}>
+                        <button 
+                            onClick={() => setShowAddModal(false)}
+                            style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                        >
+                            <X size={18} />
+                        </button>
+
+                        <h3 style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)' }}>
+                            <UserPlus size={20} /> Add New Company Member
+                        </h3>
+                        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '18px' }}>
+                            Directly create and activate an approved user account.
+                        </p>
+
+                        <form onSubmit={handleAddUser}>
+                            <div className="form-group">
+                                <label>Username *</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="e.g. john_doe"
+                                    value={newUsername}
+                                    onChange={(e) => setNewUsername(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '12px' }}>
+                                <label>Initial Password *</label>
+                                <input
+                                    type="password"
+                                    className="form-control"
+                                    placeholder="••••••••"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginTop: '12px' }}>
+                                <label>Role *</label>
+                                <select
+                                    value={newRole}
+                                    onChange={(e) => setNewRole(e.target.value)}
+                                    className="form-control"
+                                >
+                                    <option value="user">Standard User (Analytics & Forecasts)</option>
+                                    <option value="admin">Administrator (Full Access)</option>
+                                </select>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
+                                <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-secondary btn-sm">
+                                    Cancel
+                                </button>
+                                <button type="submit" className="btn btn-primary btn-sm" disabled={addLoading}>
+                                    {addLoading ? 'Creating...' : 'Create Member'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Reset Password */}
+            {showPasswordModal && selectedUser && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '20px'
+                }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '400px', padding: '24px', position: 'relative' }}>
+                        <button 
+                            onClick={() => { setShowPasswordModal(false); setSelectedUser(null); }}
+                            style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                        >
+                            <X size={18} />
+                        </button>
+
+                        <h3 style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)' }}>
+                            <KeyRound size={20} /> Reset Password
+                        </h3>
+                        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '18px' }}>
+                            Set a new password for <strong>{selectedUser.username}</strong>.
+                        </p>
+
+                        <form onSubmit={handleResetPassword}>
+                            <div className="form-group">
+                                <label>New Password *</label>
+                                <input
+                                    type="password"
+                                    className="form-control"
+                                    placeholder="Enter new secure password"
+                                    value={resetPassword}
+                                    onChange={(e) => setResetPassword(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
+                                <button type="button" onClick={() => { setShowPasswordModal(false); setSelectedUser(null); }} className="btn btn-secondary btn-sm">
+                                    Cancel
+                                </button>
+                                <button type="submit" className="btn btn-primary btn-sm" disabled={resetLoading}>
+                                    {resetLoading ? 'Resetting...' : 'Save Password'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

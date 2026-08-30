@@ -437,6 +437,33 @@ async function startServer() {
             }
         });
 
+        app.post('/api/users', async (req, res) => {
+            try {
+                if (req.user.role !== 'admin') {
+                    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+                }
+                const result = await db.adminCreateUser(req.body, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error creating user:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
+        app.put('/api/users/:id/password', async (req, res) => {
+            try {
+                if (req.user.role !== 'admin') {
+                    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+                }
+                const { password } = req.body;
+                const result = await db.adminResetPassword(req.params.id, password, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error resetting password:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
         app.delete('/api/users/:id', async (req, res) => {
             try {
                 if (req.user.role !== 'admin') {
