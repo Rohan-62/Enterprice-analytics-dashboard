@@ -89,7 +89,17 @@ function Login() {
             const result = await api.registerUser(joinUsername, joinPassword, joinRole, joinCompanyCode);
 
             if (result.success) {
-                handleAuthSuccess(result);
+                if (result.pendingApproval) {
+                    setSuccessMessage(result.message || 'Request submitted! Your company administrator must approve your account before you can log in.');
+                    setJoinUsername('');
+                    setJoinPassword('');
+                    setJoinCompanyCode('');
+                    setTimeout(() => {
+                        setTab('login');
+                    }, 4000);
+                } else {
+                    handleAuthSuccess(result);
+                }
             } else {
                 setError(result.message || 'Failed to join company.');
             }

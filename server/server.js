@@ -395,6 +395,61 @@ async function startServer() {
             }
         });
 
+        // --- User Approvals & Management (Admin Only) ---
+        app.get('/api/users', async (req, res) => {
+            try {
+                if (req.user.role !== 'admin') {
+                    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+                }
+                const users = await db.getCompanyUsers(req.user.company_id);
+                res.json(users);
+            } catch (error) {
+                console.error('Error getting users:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+        app.put('/api/users/:id/status', async (req, res) => {
+            try {
+                if (req.user.role !== 'admin') {
+                    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+                }
+                const { status } = req.body;
+                const result = await db.updateUserStatus(req.params.id, status, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error updating user status:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
+        app.put('/api/users/:id/role', async (req, res) => {
+            try {
+                if (req.user.role !== 'admin') {
+                    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+                }
+                const { role } = req.body;
+                const result = await db.updateUserRole(req.params.id, role, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error updating user role:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
+        app.delete('/api/users/:id', async (req, res) => {
+            try {
+                if (req.user.role !== 'admin') {
+                    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+                }
+                const result = await db.deleteCompanyUser(req.params.id, req.user);
+                res.json(result);
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                res.status(500).json({ success: false, message: error.message });
+            }
+        });
+
         // React Router fallback (must be after all API routes)
         app.use((req, res) => {
             res.sendFile(path.join(__dirname, '../client/dist/index.html'));

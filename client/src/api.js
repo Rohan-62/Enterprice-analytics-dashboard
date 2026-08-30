@@ -215,5 +215,37 @@ export const api = {
     async getAuditLogs(page = 1, limit = 25) {
         const response = await fetch(`${API_URL}/audit-logs?page=${page}&limit=${limit}`, { headers: getHeaders() });
         return response.json();
+    },
+
+    // --- User Approvals & Management (Admin Only) ---
+    async getUsers() {
+        const response = await fetch(`${API_URL}/users`, { headers: getHeaders() });
+        return response.json();
+    },
+
+    async updateUserStatus(id, status) {
+        const response = await fetch(`${API_URL}/users/${id}/status`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify({ status })
+        });
+        return response.json();
+    },
+
+    async updateUserRole(id, role) {
+        const response = await fetch(`${API_URL}/users/${id}/role`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify({ role })
+        });
+        return response.json();
+    },
+
+    async deleteUser(id) {
+        const response = await fetch(`${API_URL}/users/${id}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        return response.json();
     }
 };

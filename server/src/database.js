@@ -24,7 +24,7 @@ class AppDatabase {
     async initialize() {
         try {
             await this.initializeDatabase();
-            console.log('Database initialized successfully with Multi-Tenant Architecture');
+            console.log('Database initialized successfully with Multi-Tenant Architecture & Admin Approval Flow');
             return this;
         } catch (error) {
             console.error('Error initializing database:', error);
@@ -43,7 +43,7 @@ class AppDatabase {
             )
         `);
 
-        // 2. Users table (linked to company)
+        // 2. Users table (linked to company, with approval status)
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -51,6 +51,7 @@ class AppDatabase {
                 username TEXT NOT NULL,
                 password TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'user',
+                status TEXT NOT NULL DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
@@ -119,7 +120,7 @@ class AppDatabase {
             )
         `);
 
-        // Migrations: Add company_id column if tables already existed previously without it
+        // Migrations: Add company_id column if missing
         const tablesWithCompany = ['users', 'products', 'suppliers', 'prices', 'price_alerts', 'audit_logs'];
         for (const table of tablesWithCompany) {
             await this.pool.query(`
@@ -135,7 +136,21 @@ class AppDatabase {
             `);
         }
 
-        // Clean out legacy unassigned seed/mock data (data without valid company)
+        // Migration: Add status column to users table if missing
+        await this.pool.query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'status'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
+                    UPDATE users SET status = 'approved' WHERE role = 'admin';
+                END IF;
+            END $$;
+        `);
+
+        // Clean out legacy unassigned seed/mock data
         await this.pool.query(`DELETE FROM prices WHERE company_id IS NULL`);
         await this.pool.query(`DELETE FROM price_alerts WHERE company_id IS NULL`);
         await this.pool.query(`DELETE FROM audit_logs WHERE company_id IS NULL`);
@@ -146,6 +161,7 @@ class AppDatabase {
         // Create indexes
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_code ON companies(company_code)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id, username)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_users_status ON users(company_id, status)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_product_company ON products(company_id)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_supplier_company ON suppliers(company_id)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_price_company_date ON prices(company_id, entry_date)`);
@@ -205,11 +221,11 @@ class AppDatabase {
         );
         const company = compRes.rows[0];
 
-        // Insert initial Admin User
+        // Insert initial Admin User (Admin is immediately 'approved')
         const hashedPassword = this.hashPassword(password);
         const userRes = await this.pool.query(
-            'INSERT INTO users (company_id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, username, role',
-            [company.id, trimmedUsername, hashedPassword, 'admin']
+            'INSERT INTO users (company_id, username, password, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, status',
+            [company.id, trimmedUsername, hashedPassword, 'admin', 'approved']
         );
         const user = userRes.rows[0];
 
@@ -226,6 +242,7 @@ class AppDatabase {
                 id: user.id,
                 username: user.username,
                 role: user.role,
+                status: user.status,
                 company_id: company.id,
                 company_name: company.name,
                 company_code: company.company_code
@@ -251,7 +268,7 @@ class AppDatabase {
         // Find company by company_code
         const compRes = await this.pool.query('SELECT id, name, company_code FROM companies WHERE UPPER(company_code) = $1', [trimmedCode]);
         if (compRes.rows.length === 0) {
-            return { success: false, message: 'Invalid Company Code. Please verify with your company admin.' };
+            return { success: false, message: 'Invalid Company Code. Please check with your administrator.' };
         }
         const company = compRes.rows[0];
 
@@ -261,26 +278,28 @@ class AppDatabase {
             [company.id, trimmedUsername]
         );
         if (userCheck.rows.length > 0) {
-            return { success: false, message: `Username "${trimmedUsername}" is already taken in ${company.name}.` };
+            return { success: false, message: `Username "${trimmedUsername}" is already registered in ${company.name}.` };
         }
 
-        // Insert user
+        // Insert user with status = 'pending' (requires company admin approval)
         const hashedPassword = this.hashPassword(password);
         const userRes = await this.pool.query(
-            'INSERT INTO users (company_id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, username, role',
-            [company.id, trimmedUsername, hashedPassword, assignedRole]
+            'INSERT INTO users (company_id, username, password, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, status',
+            [company.id, trimmedUsername, hashedPassword, assignedRole, 'pending']
         );
         const user = userRes.rows[0];
 
-        await this.logAction(user.id, user.username, 'REGISTER', 'user', user.id, { role: user.role, company: company.name }, company.id);
+        await this.logAction(user.id, user.username, 'REGISTER_PENDING', 'user', user.id, { role: user.role, status: 'pending', company: company.name }, company.id);
 
         return {
             success: true,
+            pendingApproval: true,
+            message: `Registration request submitted! Your company administrator (${company.name}) must approve your account before you can log in.`,
             user: {
                 id: user.id,
                 username: user.username,
                 role: user.role,
-                company_id: company.id,
+                status: user.status,
                 company_name: company.name,
                 company_code: company.company_code
             }
@@ -294,7 +313,7 @@ class AppDatabase {
 
         const hashedPassword = this.hashPassword(password);
         let query = `
-            SELECT u.id, u.username, u.role, u.company_id, c.name as company_name, c.company_code
+            SELECT u.id, u.username, u.role, u.status, u.company_id, c.name as company_name, c.company_code
             FROM users u
             JOIN companies c ON u.company_id = c.id
             WHERE LOWER(u.username) = LOWER($1) AND u.password = $2
@@ -309,12 +328,87 @@ class AppDatabase {
         const res = await this.pool.query(query, params);
 
         if (res.rows.length === 1) {
-            return { success: true, user: res.rows[0] };
+            const user = res.rows[0];
+
+            // Check approval status
+            if (user.status === 'pending') {
+                return {
+                    success: false,
+                    isPending: true,
+                    message: 'Your account is currently pending approval by your company administrator. Please contact your admin to activate your access.'
+                };
+            }
+
+            if (user.status === 'rejected') {
+                return {
+                    success: false,
+                    message: 'Your access request was declined by the company administrator.'
+                };
+            }
+
+            return { success: true, user };
         } else if (res.rows.length > 1) {
             return { success: false, message: 'Multiple accounts found with this username. Please specify your Company Code.' };
         }
 
         return { success: false, message: 'Invalid credentials or company code.' };
+    }
+
+    // ==========================================
+    // User Approvals & Management (Admin Only)
+    // ==========================================
+    async getCompanyUsers(companyId) {
+        const res = await this.pool.query(
+            `SELECT id, username, role, status,
+                    TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as created_at
+             FROM users
+             WHERE company_id = $1
+             ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END, created_at DESC`,
+            [companyId]
+        );
+        return res.rows;
+    }
+
+    async updateUserStatus(targetUserId, status, adminUser) {
+        if (!['approved', 'pending', 'rejected'].includes(status)) {
+            return { success: false, message: 'Invalid status.' };
+        }
+
+        const target = await this.pool.query('SELECT username, role, status FROM users WHERE id = $1 AND company_id = $2', [targetUserId, adminUser.company_id]);
+        if (target.rows.length === 0) return { success: false, message: 'User not found in your company.' };
+
+        await this.pool.query('UPDATE users SET status = $1 WHERE id = $2 AND company_id = $3', [status, targetUserId, adminUser.company_id]);
+        await this.logAction(adminUser.id, adminUser.username, `USER_${status.toUpperCase()}`, 'user', targetUserId, { targetUsername: target.rows[0].username, oldStatus: target.rows[0].status, newStatus: status }, adminUser.company_id);
+
+        return { success: true, message: `User ${target.rows[0].username} is now ${status}.` };
+    }
+
+    async updateUserRole(targetUserId, role, adminUser) {
+        if (!['admin', 'user'].includes(role)) {
+            return { success: false, message: 'Invalid role.' };
+        }
+
+        const target = await this.pool.query('SELECT username, role FROM users WHERE id = $1 AND company_id = $2', [targetUserId, adminUser.company_id]);
+        if (target.rows.length === 0) return { success: false, message: 'User not found in your company.' };
+
+        await this.pool.query('UPDATE users SET role = $1 WHERE id = $2 AND company_id = $3', [role, targetUserId, adminUser.company_id]);
+        await this.logAction(adminUser.id, adminUser.username, 'USER_ROLE_CHANGE', 'user', targetUserId, { targetUsername: target.rows[0].username, oldRole: target.rows[0].role, newRole: role }, adminUser.company_id);
+
+        return { success: true, message: `User ${target.rows[0].username} role changed to ${role}.` };
+    }
+
+    async deleteCompanyUser(targetUserId, adminUser) {
+        if (parseInt(targetUserId, 10) === parseInt(adminUser.id, 10)) {
+            return { success: false, message: 'You cannot delete your own administrator account.' };
+        }
+
+        const target = await this.pool.query('SELECT username FROM users WHERE id = $1 AND company_id = $2', [targetUserId, adminUser.company_id]);
+        if (target.rows.length === 0) return { success: false, message: 'User not found in your company.' };
+
+        await this.pool.query('DELETE FROM users WHERE id = $1 AND company_id = $2', [targetUserId, adminUser.company_id]);
+        await this.logAction(adminUser.id, adminUser.username, 'DELETE_USER', 'user', targetUserId, { targetUsername: target.rows[0].username }, adminUser.company_id);
+
+        return { success: true, message: `User ${target.rows[0].username} removed from company.` };
     }
 
     // ==========================================
@@ -461,10 +555,15 @@ class AppDatabase {
         const products = await this.pool.query('SELECT COUNT(*) as count FROM products WHERE company_id = $1', [companyId]);
         const suppliers = await this.pool.query('SELECT COUNT(*) as count FROM suppliers WHERE company_id = $1', [companyId]);
         const prices = await this.pool.query('SELECT COUNT(*) as count FROM prices WHERE company_id = $1', [companyId]);
+        const pendingUsers = await this.pool.query('SELECT COUNT(*) as count FROM users WHERE company_id = $1 AND status = $2', [companyId, 'pending']);
+        const totalUsers = await this.pool.query('SELECT COUNT(*) as count FROM users WHERE company_id = $1', [companyId]);
+
         return {
             products: parseInt(products.rows[0].count, 10),
             suppliers: parseInt(suppliers.rows[0].count, 10),
-            prices: parseInt(prices.rows[0].count, 10)
+            prices: parseInt(prices.rows[0].count, 10),
+            pending_users: parseInt(pendingUsers.rows[0].count, 10),
+            total_users: parseInt(totalUsers.rows[0].count, 10)
         };
     }
 

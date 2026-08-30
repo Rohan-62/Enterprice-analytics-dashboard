@@ -8,6 +8,9 @@ import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
 import Alerts from './pages/admin/Alerts';
 import AuditLog from './pages/admin/AuditLog';
+import Products from './pages/admin/Products';
+import Suppliers from './pages/admin/Suppliers';
+import Users from './pages/admin/Users';
 import PredictiveAnalysis from './pages/PredictiveAnalysis';
 
 const PrivateRoute = ({ children }) => {
@@ -60,13 +63,16 @@ function App() {
                         
                         {/* Admin Routes */}
                         <Route path="/admin" element={<AdminRoute><Dashboard /></AdminRoute>} />
+                        <Route path="/admin/products" element={<AdminRoute><Products /></AdminRoute>} />
+                        <Route path="/admin/suppliers" element={<AdminRoute><Suppliers /></AdminRoute>} />
+                        <Route path="/admin/users" element={<AdminRoute><Users /></AdminRoute>} />
                         <Route path="/admin/alerts" element={<AdminRoute><Alerts /></AdminRoute>} />
                         <Route path="/admin/audit-log" element={<AdminRoute><AuditLog /></AdminRoute>} />
                     </Routes>
                 </main>
                 <footer className="footer">
                     <div className="container">
-                        <p>&copy; {new Date().getFullYear()} PriceTracker Pro. All rights reserved.</p>
+                        <p>&copy; {new Date().getFullYear()} PriceTracker Pro. Multi-Tenant Enterprise Edition.</p>
                     </div>
                 </footer>
             </div>
