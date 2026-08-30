@@ -1,7 +1,7 @@
 databases:
   - name: price-tracking-db
     databaseName: price_tracking
-    user: postgres
+    user: price_user
     plan: free
 
 services:
