@@ -10,11 +10,29 @@ const getHeaders = () => {
 
 export const api = {
     // --- Auth ---
-    async login(username, password) {
+    async login(username, password, companyCode = '') {
         const response = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password, companyCode })
+        });
+        return response.json();
+    },
+
+    async registerCompany(companyName, username, password) {
+        const response = await fetch(`${API_URL}/auth/register-company`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyName, username, password })
+        });
+        return response.json();
+    },
+
+    async registerUser(username, password, role, companyCode) {
+        const response = await fetch(`${API_URL}/auth/register-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, role, companyCode })
         });
         return response.json();
     },

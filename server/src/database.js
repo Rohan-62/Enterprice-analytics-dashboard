@@ -24,7 +24,7 @@ class AppDatabase {
     async initialize() {
         try {
             await this.initializeDatabase();
-            console.log('Database initialized successfully');
+            console.log('Database initialized successfully with Multi-Tenant Architecture');
             return this;
         } catch (error) {
             console.error('Error initializing database:', error);
@@ -33,27 +33,54 @@ class AppDatabase {
     }
 
     async initializeDatabase() {
-        // Create tables
+        // 1. Companies table
         await this.pool.query(`
-            CREATE TABLE IF NOT EXISTS products (
+            CREATE TABLE IF NOT EXISTS companies (
                 id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                company_code TEXT NOT NULL UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
+        // 2. Users table (linked to company)
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 3. Products table (linked to company)
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 4. Suppliers table (linked to company)
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS suppliers (
                 id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 name TEXT NOT NULL,
                 location TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
+        // 5. Prices table (linked to company, product, supplier)
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS prices (
                 id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 product_id INTEGER NOT NULL,
                 supplier_id INTEGER NOT NULL,
                 price REAL NOT NULL,
@@ -64,20 +91,11 @@ class AppDatabase {
             )
         `);
 
-        await this.pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'user',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // Price Alerts table
+        // 6. Price Alerts table (linked to company)
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS price_alerts (
                 id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 product_id INTEGER NOT NULL,
                 min_price REAL,
                 max_price REAL,
@@ -86,10 +104,11 @@ class AppDatabase {
             )
         `);
 
-        // Audit Logs table
+        // 7. Audit Logs table (linked to company)
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 user_id INTEGER,
                 username TEXT,
                 action TEXT NOT NULL,
@@ -100,107 +119,48 @@ class AppDatabase {
             )
         `);
 
+        // Migrations: Add company_id column if tables already existed previously without it
+        const tablesWithCompany = ['users', 'products', 'suppliers', 'prices', 'price_alerts', 'audit_logs'];
+        for (const table of tablesWithCompany) {
+            await this.pool.query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = '${table}' AND column_name = 'company_id'
+                    ) THEN
+                        ALTER TABLE ${table} ADD COLUMN company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+                    END IF;
+                END $$;
+            `);
+        }
+
+        // Clean out legacy unassigned seed/mock data (data without valid company)
+        await this.pool.query(`DELETE FROM prices WHERE company_id IS NULL`);
+        await this.pool.query(`DELETE FROM price_alerts WHERE company_id IS NULL`);
+        await this.pool.query(`DELETE FROM audit_logs WHERE company_id IS NULL`);
+        await this.pool.query(`DELETE FROM products WHERE company_id IS NULL`);
+        await this.pool.query(`DELETE FROM suppliers WHERE company_id IS NULL`);
+        await this.pool.query(`DELETE FROM users WHERE company_id IS NULL`);
+
+        // Create indexes
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_code ON companies(company_code)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id, username)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_product_company ON products(company_id)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_supplier_company ON suppliers(company_id)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_price_company_date ON prices(company_id, entry_date)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_product_date ON prices(product_id, entry_date)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_supplier_date ON prices(supplier_id, entry_date)`);
-        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC)`);
-
-        // Check if we have data before seeding
-        const res = await this.pool.query('SELECT COUNT(*) as count FROM suppliers');
-        const count = parseInt(res.rows[0].count, 10);
-        console.log('Suppliers count in db:', count);
-        
-        if (count === 0) {
-            console.log('Database exists but is empty, seeding...');
-            await this.seedData();
-        }
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_company_created ON audit_logs(company_id, created_at DESC)`);
     }
 
-    async seedData() {
-        console.log('Seeding database...');
-
-        // Insert products
-        const products = [
-            'DORB/RBDOC', 'SOYA DOC (45%)', 'SOYA DOC (46%)', 'SOYA DOC (47%)',
-            'SOYA DOC (48%)', 'SOYA DOC (50%)', 'SOYA DOC (HiPro)', 'Maize DOC',
-            'GN DOC (40%)', 'GN DOC (45%)', 'GN DOC (50%)', 'MUSTARD DOC',
-            'COTTON DOC', 'DORB/RBDOC (Hipro)'
-        ];
-
-        for (const name of products) {
-            try {
-                await this.pool.query('INSERT INTO products (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [name]);
-            } catch (e) {
-                console.log('Product insert error:', e.message);
-            }
+    generateCompanyCode() {
+        const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+        let code = 'COMP-';
+        for (let i = 0; i < 6; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-
-        // Insert suppliers
-        const suppliers = [
-            ['Ritish', 'Khanna'], ['RamdevBaba', 'Bhrahampuri'], ['Chaitanya Solv', 'Neora'],
-            ['Jayshree', 'Durg'], ['Shivangi', 'Bilaspur'], ['Rudrapur Solv', 'Rudrapur'],
-            ['Surago', 'Bundi'], ['Seahawk', 'Aurangabad (Bihar)'], ['Suryamitra', 'Katni'],
-            ['Saibaba Naturals', 'Nagpur'], ['Ramdev Baba Solv', 'Nagpur'], ['SLS Agro', 'Kartagi'],
-            ['Maheshwari', 'Hyderabad'], ['Kalyani', 'Malda'], ['Om Shri Sai', 'Bhuvneshwar'],
-            ['Growing Tree', 'Bhuneshwar'], ['Bargarh', 'Bargarh'], ['Anmol', 'Kolkata'],
-            ['Siddhivinayak', 'Gondia'], ['Aadityaa Protein', 'Nagpur'], ['Betul oil', 'Satna'],
-            ['Betul oil', 'Betul'], ['Betul oil', 'Solapur'], ['Rayat Agro', 'Dharashiv'],
-            ['Deesan Agro', 'Dhule'], ['Living Foods', 'Shujalpur'], ['Shiv Group', 'Kota'],
-            ['Dhakshita Solv', 'Warangal'], ['Vijay', 'Vijaywada'], ['Abhay Solv', 'Koppal'],
-            ['Orchard Solv', 'Tiruppur'], ['Shri Krishna', 'Bargarh'], ['Ramdev', 'Piparia'],
-            ['Shrinivasa Cattel', 'Nanded'], ['Sachin Proteins', 'Udgir'], ['Siri Agro', 'Nanded'],
-            ['Vijay Soya', 'Latur'], ['Tulija Bhavani Soya', 'Murud'], ['Agrocean', 'Majalgaon'],
-            ['Kanhaiya Solv', 'Barnala'], ['Shree Ram', 'Patiala'], ['Shree Sita Solv', 'Nagpur'],
-            ['Sai Baba Solv', 'Nagpur'], ['ROC', 'Rajkot'], ['Rajesh', 'Rajkot'],
-            ['National Industries', 'Dhoraji'], ['Divya Solv', 'Kuvadva'], ['Nuchem', 'Bikaner'],
-            ['Shymakala Agro', 'Nagpur'], ['Shalimar', 'Nagpur'], ['Narayana Agro', 'Udgir'],
-            ['Minakshi Solv', 'Latur'], ['Amrit Refined', 'Mandsaur'], ['Soyug', 'Bundi'],
-            ['Tania Industries', 'Nagpur'], ['Rajnandgaon', 'Rajnandgaon (CG)'],
-            ['Badnawar', 'Badnawar (MP)'], ['Latur Solv', 'Latur'],
-            ['Sree Siddarameshwara Agro', 'Nanded'], ['Snehil Soya', 'Sagar (MP)'],
-            ['Sanwaria Agro', 'Itarsi'], ['RH Solv', 'Seoni'], ['Midiya', 'Radhanpur'],
-            ['Patanjali Foods', 'Baran'], ['AWL (Adani)', 'Alwar'], ['AWL (Adani)', 'Bundi'],
-            ['AWL (Adani)', 'Gohana'], ['Shiv Group', 'Kota'], ['Tirupati Solv', 'Hardoi'],
-            ['Mantora', 'Kanpur'], ['Avadh', 'Bahraich'], ['Ashok Dall Mill', 'Itarsi'],
-            ['AWL', 'Mantralayam'], ['AWL', 'Gohana'], ['Thakurji Solv', 'Jalna'],
-            ['Anmol Solv', 'Gomta (Gujarat)'], ['Vinod', 'Bikaner']
-        ];
-
-        for (const [name, location] of suppliers) {
-            try {
-                await this.pool.query('INSERT INTO suppliers (name, location) VALUES ($1, $2)', [name, location]);
-            } catch (e) {
-                console.log('Supplier insert error:', e.message);
-            }
-        }
-
-        // Insert default users (password: admin123 / user123)
-        try {
-            const hashedAdminPassword = this.hashPassword('admin123');
-            const hashedUserPassword = this.hashPassword('user123');
-            await this.pool.query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING', ['admin', hashedAdminPassword, 'admin']);
-            await this.pool.query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING', ['user', hashedUserPassword, 'user']);
-        } catch (e) {
-            console.log('User insert error:', e.message);
-        }
-
-        // Insert sample prices
-        const today = new Date().toISOString().split('T')[0];
-        const priceData = [
-            [1, 1, 3500.00, today], [1, 2, 3450.00, today], [1, 3, 3520.00, today],
-            [1, 4, 3480.00, today], [1, 5, 3420.00, today], [2, 6, 4200.00, today],
-            [2, 7, 4150.00, today], [2, 8, 4225.00, today], [2, 9, 4180.00, today]
-        ];
-
-        for (const [product_id, supplier_id, price, entry_date] of priceData) {
-            try {
-                await this.pool.query('INSERT INTO prices (product_id, supplier_id, price, entry_date) VALUES ($1, $2, $3, $4)',
-                    [product_id, supplier_id, price, entry_date]);
-            } catch (e) {
-                console.log('Price insert error:', e.message);
-            }
-        }
-
-        console.log('Database seeded successfully');
+        return code;
     }
 
     hashPassword(password) {
@@ -208,29 +168,182 @@ class AppDatabase {
     }
 
     // ==========================================
+    // Auth & Company Management
+    // ==========================================
+    async registerCompany({ companyName, username, password }) {
+        if (!companyName || !companyName.trim()) {
+            return { success: false, message: 'Company name is required.' };
+        }
+        if (!username || !username.trim()) {
+            return { success: false, message: 'Username is required.' };
+        }
+        if (!password || password.length < 4) {
+            return { success: false, message: 'Password must be at least 4 characters long.' };
+        }
+
+        const trimmedCompanyName = companyName.trim();
+        const trimmedUsername = username.trim();
+
+        // Generate unique company code
+        let companyCode = this.generateCompanyCode();
+        let isUnique = false;
+        let attempts = 0;
+        while (!isUnique && attempts < 10) {
+            const check = await this.pool.query('SELECT id FROM companies WHERE company_code = $1', [companyCode]);
+            if (check.rows.length === 0) {
+                isUnique = true;
+            } else {
+                companyCode = this.generateCompanyCode();
+                attempts++;
+            }
+        }
+
+        // Insert company
+        const compRes = await this.pool.query(
+            'INSERT INTO companies (name, company_code) VALUES ($1, $2) RETURNING id, name, company_code, created_at',
+            [trimmedCompanyName, companyCode]
+        );
+        const company = compRes.rows[0];
+
+        // Insert initial Admin User
+        const hashedPassword = this.hashPassword(password);
+        const userRes = await this.pool.query(
+            'INSERT INTO users (company_id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, username, role',
+            [company.id, trimmedUsername, hashedPassword, 'admin']
+        );
+        const user = userRes.rows[0];
+
+        await this.logAction(user.id, user.username, 'CREATE', 'company', company.id, { companyName: company.name, companyCode: company.company_code }, company.id);
+
+        return {
+            success: true,
+            company: {
+                id: company.id,
+                name: company.name,
+                company_code: company.company_code
+            },
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                company_id: company.id,
+                company_name: company.name,
+                company_code: company.company_code
+            }
+        };
+    }
+
+    async registerUser({ username, password, role, companyCode }) {
+        if (!companyCode || !companyCode.trim()) {
+            return { success: false, message: 'Company code is required.' };
+        }
+        if (!username || !username.trim()) {
+            return { success: false, message: 'Username is required.' };
+        }
+        if (!password || password.length < 4) {
+            return { success: false, message: 'Password must be at least 4 characters long.' };
+        }
+
+        const trimmedCode = companyCode.trim().toUpperCase();
+        const trimmedUsername = username.trim();
+        const assignedRole = (role === 'admin') ? 'admin' : 'user';
+
+        // Find company by company_code
+        const compRes = await this.pool.query('SELECT id, name, company_code FROM companies WHERE UPPER(company_code) = $1', [trimmedCode]);
+        if (compRes.rows.length === 0) {
+            return { success: false, message: 'Invalid Company Code. Please verify with your company admin.' };
+        }
+        const company = compRes.rows[0];
+
+        // Check if username already exists in this company
+        const userCheck = await this.pool.query(
+            'SELECT id FROM users WHERE company_id = $1 AND LOWER(username) = LOWER($2)',
+            [company.id, trimmedUsername]
+        );
+        if (userCheck.rows.length > 0) {
+            return { success: false, message: `Username "${trimmedUsername}" is already taken in ${company.name}.` };
+        }
+
+        // Insert user
+        const hashedPassword = this.hashPassword(password);
+        const userRes = await this.pool.query(
+            'INSERT INTO users (company_id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, username, role',
+            [company.id, trimmedUsername, hashedPassword, assignedRole]
+        );
+        const user = userRes.rows[0];
+
+        await this.logAction(user.id, user.username, 'REGISTER', 'user', user.id, { role: user.role, company: company.name }, company.id);
+
+        return {
+            success: true,
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                company_id: company.id,
+                company_name: company.name,
+                company_code: company.company_code
+            }
+        };
+    }
+
+    async userLogin(username, password, companyCode) {
+        if (!username || !password) {
+            return { success: false, message: 'Username and password are required.' };
+        }
+
+        const hashedPassword = this.hashPassword(password);
+        let query = `
+            SELECT u.id, u.username, u.role, u.company_id, c.name as company_name, c.company_code
+            FROM users u
+            JOIN companies c ON u.company_id = c.id
+            WHERE LOWER(u.username) = LOWER($1) AND u.password = $2
+        `;
+        const params = [username.trim(), hashedPassword];
+
+        if (companyCode && companyCode.trim()) {
+            query += ' AND UPPER(c.company_code) = $3';
+            params.push(companyCode.trim().toUpperCase());
+        }
+
+        const res = await this.pool.query(query, params);
+
+        if (res.rows.length === 1) {
+            return { success: true, user: res.rows[0] };
+        } else if (res.rows.length > 1) {
+            return { success: false, message: 'Multiple accounts found with this username. Please specify your Company Code.' };
+        }
+
+        return { success: false, message: 'Invalid credentials or company code.' };
+    }
+
+    // ==========================================
     // Audit Logging
     // ==========================================
-    async logAction(userId, username, action, entityType, entityId, details) {
+    async logAction(userId, username, action, entityType, entityId, details, companyId) {
         try {
             await this.pool.query(
-                'INSERT INTO audit_logs (user_id, username, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6)',
-                [userId, username, action, entityType, entityId, typeof details === 'string' ? details : JSON.stringify(details)]
+                'INSERT INTO audit_logs (company_id, user_id, username, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [companyId, userId, username, action, entityType, entityId, typeof details === 'string' ? details : JSON.stringify(details)]
             );
         } catch (e) {
             console.error('Audit log error:', e.message);
         }
     }
 
-    async getAuditLogs(page = 1, limit = 25) {
+    async getAuditLogs(page = 1, limit = 25, companyId) {
         const offset = (page - 1) * limit;
-        const countRes = await this.pool.query('SELECT COUNT(*) as count FROM audit_logs');
+        const countRes = await this.pool.query('SELECT COUNT(*) as count FROM audit_logs WHERE company_id = $1', [companyId]);
         const total = parseInt(countRes.rows[0].count, 10);
 
         const res = await this.pool.query(
             `SELECT id, user_id, username, action, entity_type, entity_id, details,
                     TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
-             FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-            [limit, offset]
+             FROM audit_logs 
+             WHERE company_id = $1 
+             ORDER BY created_at DESC 
+             LIMIT $2 OFFSET $3`,
+            [companyId, limit, offset]
         );
 
         return {
@@ -240,18 +353,25 @@ class AppDatabase {
     }
 
     // ==========================================
-    // Products (with audit)
+    // Products (Scoped to Company)
     // ==========================================
-    async getProducts() {
-        const res = await this.pool.query('SELECT id, name FROM products ORDER BY id ASC');
-        console.log('getProducts returning:', res.rows.length, 'items');
+    async getProducts(companyId) {
+        const res = await this.pool.query(
+            'SELECT id, name FROM products WHERE company_id = $1 ORDER BY id ASC',
+            [companyId]
+        );
         return res.rows;
     }
 
     async addProduct(name, user = {}) {
         try {
-            const res = await this.pool.query('INSERT INTO products (name) VALUES ($1) RETURNING id', [name]);
-            await this.logAction(user.id, user.username, 'CREATE', 'product', res.rows[0].id, { name });
+            if (!name || !name.trim()) return { success: false, message: 'Product name is required' };
+            const trimmedName = name.trim();
+            const res = await this.pool.query(
+                'INSERT INTO products (company_id, name) VALUES ($1, $2) RETURNING id',
+                [user.company_id, trimmedName]
+            );
+            await this.logAction(user.id, user.username, 'CREATE', 'product', res.rows[0].id, { name: trimmedName }, user.company_id);
             return { success: true, id: res.rows[0].id };
         } catch (e) {
             return { success: false, message: e.message };
@@ -260,9 +380,10 @@ class AppDatabase {
 
     async updateProduct(id, name, user = {}) {
         try {
-            const old = await this.pool.query('SELECT name FROM products WHERE id = $1', [id]);
-            await this.pool.query('UPDATE products SET name = $1 WHERE id = $2', [name, id]);
-            await this.logAction(user.id, user.username, 'UPDATE', 'product', id, { old_name: old.rows[0]?.name, new_name: name });
+            const old = await this.pool.query('SELECT name FROM products WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Product not found' };
+            await this.pool.query('UPDATE products SET name = $1 WHERE id = $2 AND company_id = $3', [name.trim(), id, user.company_id]);
+            await this.logAction(user.id, user.username, 'UPDATE', 'product', id, { old_name: old.rows[0]?.name, new_name: name.trim() }, user.company_id);
             return { success: true };
         } catch (e) {
             return { success: false, message: e.message };
@@ -271,9 +392,10 @@ class AppDatabase {
 
     async deleteProduct(id, user = {}) {
         try {
-            const old = await this.pool.query('SELECT name FROM products WHERE id = $1', [id]);
-            await this.pool.query('DELETE FROM products WHERE id = $1', [id]);
-            await this.logAction(user.id, user.username, 'DELETE', 'product', id, { name: old.rows[0]?.name });
+            const old = await this.pool.query('SELECT name FROM products WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Product not found' };
+            await this.pool.query('DELETE FROM products WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            await this.logAction(user.id, user.username, 'DELETE', 'product', id, { name: old.rows[0]?.name }, user.company_id);
             return { success: true };
         } catch (e) {
             return { success: false, message: e.message };
@@ -281,18 +403,24 @@ class AppDatabase {
     }
 
     // ==========================================
-    // Suppliers (with audit)
+    // Suppliers (Scoped to Company)
     // ==========================================
-    async getSuppliers() {
-        const res = await this.pool.query('SELECT id, name, location FROM suppliers ORDER BY id ASC');
-        console.log('getSuppliers returning:', res.rows.length, 'items');
+    async getSuppliers(companyId) {
+        const res = await this.pool.query(
+            'SELECT id, name, location FROM suppliers WHERE company_id = $1 ORDER BY id ASC',
+            [companyId]
+        );
         return res.rows;
     }
 
     async addSupplier(name, location, user = {}) {
         try {
-            const res = await this.pool.query('INSERT INTO suppliers (name, location) VALUES ($1, $2) RETURNING id', [name, location]);
-            await this.logAction(user.id, user.username, 'CREATE', 'supplier', res.rows[0].id, { name, location });
+            if (!name || !name.trim()) return { success: false, message: 'Supplier name is required' };
+            const res = await this.pool.query(
+                'INSERT INTO suppliers (company_id, name, location) VALUES ($1, $2, $3) RETURNING id',
+                [user.company_id, name.trim(), location ? location.trim() : '']
+            );
+            await this.logAction(user.id, user.username, 'CREATE', 'supplier', res.rows[0].id, { name: name.trim(), location: location ? location.trim() : '' }, user.company_id);
             return { success: true, id: res.rows[0].id };
         } catch (e) {
             return { success: false, message: e.message };
@@ -301,9 +429,13 @@ class AppDatabase {
 
     async updateSupplier(id, name, location, user = {}) {
         try {
-            const old = await this.pool.query('SELECT name, location FROM suppliers WHERE id = $1', [id]);
-            await this.pool.query('UPDATE suppliers SET name = $1, location = $2 WHERE id = $3', [name, location, id]);
-            await this.logAction(user.id, user.username, 'UPDATE', 'supplier', id, { old: old.rows[0], new: { name, location } });
+            const old = await this.pool.query('SELECT name, location FROM suppliers WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Supplier not found' };
+            await this.pool.query(
+                'UPDATE suppliers SET name = $1, location = $2 WHERE id = $3 AND company_id = $4',
+                [name.trim(), location ? location.trim() : '', id, user.company_id]
+            );
+            await this.logAction(user.id, user.username, 'UPDATE', 'supplier', id, { old: old.rows[0], new: { name: name.trim(), location: location ? location.trim() : '' } }, user.company_id);
             return { success: true };
         } catch (e) {
             return { success: false, message: e.message };
@@ -312,9 +444,10 @@ class AppDatabase {
 
     async deleteSupplier(id, user = {}) {
         try {
-            const old = await this.pool.query('SELECT name, location FROM suppliers WHERE id = $1', [id]);
-            await this.pool.query('DELETE FROM suppliers WHERE id = $1', [id]);
-            await this.logAction(user.id, user.username, 'DELETE', 'supplier', id, { name: old.rows[0]?.name, location: old.rows[0]?.location });
+            const old = await this.pool.query('SELECT name, location FROM suppliers WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Supplier not found' };
+            await this.pool.query('DELETE FROM suppliers WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            await this.logAction(user.id, user.username, 'DELETE', 'supplier', id, { name: old.rows[0]?.name, location: old.rows[0]?.location }, user.company_id);
             return { success: true };
         } catch (e) {
             return { success: false, message: e.message };
@@ -322,12 +455,12 @@ class AppDatabase {
     }
 
     // ==========================================
-    // Statistics
+    // Statistics (Scoped to Company)
     // ==========================================
-    async getStats() {
-        const products = await this.pool.query('SELECT COUNT(*) as count FROM products');
-        const suppliers = await this.pool.query('SELECT COUNT(*) as count FROM suppliers');
-        const prices = await this.pool.query('SELECT COUNT(*) as count FROM prices');
+    async getStats(companyId) {
+        const products = await this.pool.query('SELECT COUNT(*) as count FROM products WHERE company_id = $1', [companyId]);
+        const suppliers = await this.pool.query('SELECT COUNT(*) as count FROM suppliers WHERE company_id = $1', [companyId]);
+        const prices = await this.pool.query('SELECT COUNT(*) as count FROM prices WHERE company_id = $1', [companyId]);
         return {
             products: parseInt(products.rows[0].count, 10),
             suppliers: parseInt(suppliers.rows[0].count, 10),
@@ -335,15 +468,16 @@ class AppDatabase {
         };
     }
 
-    async getAdvancedStats() {
+    async getAdvancedStats(companyId) {
         const avgThisWeek = await this.pool.query(`
             SELECT COALESCE(AVG(price), 0) as avg_price
-            FROM prices WHERE entry_date >= CURRENT_DATE - INTERVAL '7 days'
-        `);
+            FROM prices WHERE company_id = $1 AND entry_date >= CURRENT_DATE - INTERVAL '7 days'
+        `, [companyId]);
+        
         const avgLastWeek = await this.pool.query(`
             SELECT COALESCE(AVG(price), 0) as avg_price
-            FROM prices WHERE entry_date >= CURRENT_DATE - INTERVAL '14 days' AND entry_date < CURRENT_DATE - INTERVAL '7 days'
-        `);
+            FROM prices WHERE company_id = $1 AND entry_date >= CURRENT_DATE - INTERVAL '14 days' AND entry_date < CURRENT_DATE - INTERVAL '7 days'
+        `, [companyId]);
 
         const thisWeekAvg = parseFloat(avgThisWeek.rows[0].avg_price);
         const lastWeekAvg = parseFloat(avgLastWeek.rows[0].avg_price);
@@ -354,36 +488,36 @@ class AppDatabase {
                    ROUND(CAST(AVG(p.price) AS numeric), 2) as avg_price
             FROM prices p
             JOIN products pr ON p.product_id = pr.id
-            WHERE p.entry_date >= CURRENT_DATE - INTERVAL '30 days'
+            WHERE p.company_id = $1 AND p.entry_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY pr.name
             HAVING COUNT(*) > 1
             ORDER BY volatility DESC
             LIMIT 5
-        `);
+        `, [companyId]);
 
         const cheapestSuppliers = await this.pool.query(`
             SELECT s.name as supplier_name, s.location, ROUND(CAST(AVG(p.price) AS numeric), 2) as avg_price
             FROM prices p
             JOIN suppliers s ON p.supplier_id = s.id
-            WHERE p.entry_date >= CURRENT_DATE - INTERVAL '30 days'
+            WHERE p.company_id = $1 AND p.entry_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY s.name, s.location
             ORDER BY avg_price ASC
             LIMIT 5
-        `);
+        `, [companyId]);
 
         const expensiveSuppliers = await this.pool.query(`
             SELECT s.name as supplier_name, s.location, ROUND(CAST(AVG(p.price) AS numeric), 2) as avg_price
             FROM prices p
             JOIN suppliers s ON p.supplier_id = s.id
-            WHERE p.entry_date >= CURRENT_DATE - INTERVAL '30 days'
+            WHERE p.company_id = $1 AND p.entry_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY s.name, s.location
             ORDER BY avg_price DESC
             LIMIT 5
-        `);
+        `, [companyId]);
 
         const entriesThisWeek = await this.pool.query(`
-            SELECT COUNT(*) as count FROM prices WHERE entry_date >= CURRENT_DATE - INTERVAL '7 days'
-        `);
+            SELECT COUNT(*) as count FROM prices WHERE company_id = $1 AND entry_date >= CURRENT_DATE - INTERVAL '7 days'
+        `, [companyId]);
 
         return {
             avg_price_this_week: thisWeekAvg,
@@ -397,9 +531,9 @@ class AppDatabase {
     }
 
     // ==========================================
-    // Prices (with audit)
+    // Prices (Scoped to Company)
     // ==========================================
-    async getTodayPrices() {
+    async getTodayPrices(companyId) {
         const today = new Date().toISOString().split('T')[0];
         const res = await this.pool.query(`
             SELECT p.id, p.price, TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date, p.product_id, p.supplier_id,
@@ -408,9 +542,9 @@ class AppDatabase {
             FROM prices p
             JOIN products pr ON p.product_id = pr.id
             JOIN suppliers s ON p.supplier_id = s.id
-            WHERE p.entry_date = $1
+            WHERE p.company_id = $1 AND p.entry_date = $2
             ORDER BY p.id ASC
-        `, [today]);
+        `, [companyId, today]);
         return res.rows;
     }
 
@@ -419,10 +553,10 @@ class AppDatabase {
             const { product_id, supplier_id, price, entry_date } = data;
             const date = entry_date || new Date().toISOString().split('T')[0];
             const res = await this.pool.query(
-                'INSERT INTO prices (product_id, supplier_id, price, entry_date) VALUES ($1, $2, $3, $4) RETURNING id',
-                [product_id, supplier_id, price, date]
+                'INSERT INTO prices (company_id, product_id, supplier_id, price, entry_date) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+                [user.company_id, product_id, supplier_id, price, date]
             );
-            await this.logAction(user.id, user.username, 'CREATE', 'price', res.rows[0].id, { product_id, supplier_id, price, entry_date: date });
+            await this.logAction(user.id, user.username, 'CREATE', 'price', res.rows[0].id, { product_id, supplier_id, price, entry_date: date }, user.company_id);
             return { success: true, id: res.rows[0].id };
         } catch (e) {
             return { success: false, message: e.message };
@@ -432,12 +566,14 @@ class AppDatabase {
     async updatePrice(data, user = {}) {
         try {
             const { id, product_id, supplier_id, price } = data;
-            const old = await this.pool.query('SELECT product_id, supplier_id, price FROM prices WHERE id = $1', [id]);
+            const old = await this.pool.query('SELECT product_id, supplier_id, price FROM prices WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Price record not found' };
+
             await this.pool.query(
-                'UPDATE prices SET product_id = $1, supplier_id = $2, price = $3 WHERE id = $4',
-                [product_id, supplier_id, price, id]
+                'UPDATE prices SET product_id = $1, supplier_id = $2, price = $3 WHERE id = $4 AND company_id = $5',
+                [product_id, supplier_id, price, id, user.company_id]
             );
-            await this.logAction(user.id, user.username, 'UPDATE', 'price', id, { old: old.rows[0], new: { product_id, supplier_id, price } });
+            await this.logAction(user.id, user.username, 'UPDATE', 'price', id, { old: old.rows[0], new: { product_id, supplier_id, price } }, user.company_id);
             return { success: true };
         } catch (e) {
             return { success: false, message: e.message };
@@ -449,16 +585,18 @@ class AppDatabase {
             const old = await this.pool.query(
                 `SELECT p.price, pr.name as product_name, s.name as supplier_name
                  FROM prices p JOIN products pr ON p.product_id = pr.id JOIN suppliers s ON p.supplier_id = s.id
-                 WHERE p.id = $1`, [id]);
-            await this.pool.query('DELETE FROM prices WHERE id = $1', [id]);
-            await this.logAction(user.id, user.username, 'DELETE', 'price', id, old.rows[0] || {});
+                 WHERE p.id = $1 AND p.company_id = $2`, [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Price record not found' };
+
+            await this.pool.query('DELETE FROM prices WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            await this.logAction(user.id, user.username, 'DELETE', 'price', id, old.rows[0] || {}, user.company_id);
             return { success: true };
         } catch (e) {
             return { success: false, message: e.message };
         }
     }
 
-    async getPrices(filters = {}) {
+    async getPrices(filters = {}, companyId) {
         let sql = `
             SELECT p.id, p.price, TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date,
                    pr.name as product_name,
@@ -466,10 +604,10 @@ class AppDatabase {
             FROM prices p
             JOIN products pr ON p.product_id = pr.id
             JOIN suppliers s ON p.supplier_id = s.id
-            WHERE 1=1
+            WHERE p.company_id = $1
         `;
-        const params = [];
-        let paramIndex = 1;
+        const params = [companyId];
+        let paramIndex = 2;
 
         if (filters.product_id) {
             sql += ` AND p.product_id = $${paramIndex++}`;
@@ -494,17 +632,17 @@ class AppDatabase {
         return res.rows;
     }
 
-    async getDailyPrices(date, productId) {
+    async getDailyPrices(date, productId, companyId) {
         const res = await this.pool.query(`
             SELECT p.id, p.price, TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date, p.product_id, p.supplier_id,
                    s.name as supplier_name, s.location as supplier_location
             FROM prices p
             JOIN suppliers s ON p.supplier_id = s.id
-            WHERE p.entry_date = $1 AND p.product_id = $2
+            WHERE p.company_id = $1 AND p.entry_date = $2 AND p.product_id = $3
             ORDER BY p.price ASC
-        `, [date, productId]);
+        `, [companyId, date, productId]);
 
-        const product = await this.pool.query('SELECT name FROM products WHERE id = $1', [productId]);
+        const product = await this.pool.query('SELECT name FROM products WHERE id = $1 AND company_id = $2', [productId, companyId]);
 
         return {
             success: true,
@@ -513,141 +651,24 @@ class AppDatabase {
         };
     }
 
-    // ==========================================
-    // Price Alerts
-    // ==========================================
-    async getAlerts() {
-        const res = await this.pool.query(`
-            SELECT a.id, a.product_id, a.min_price, a.max_price,
-                   pr.name as product_name,
-                   TO_CHAR(a.created_at, 'YYYY-MM-DD HH24:MI') as created_at
-            FROM price_alerts a
-            JOIN products pr ON a.product_id = pr.id
-            ORDER BY a.created_at DESC
-        `);
-        return res.rows;
-    }
-
-    async addAlert(productId, minPrice, maxPrice, user = {}) {
-        try {
-            const res = await this.pool.query(
-                'INSERT INTO price_alerts (product_id, min_price, max_price) VALUES ($1, $2, $3) RETURNING id',
-                [productId, minPrice || null, maxPrice || null]
-            );
-            await this.logAction(user.id, user.username, 'CREATE', 'alert', res.rows[0].id, { productId, minPrice, maxPrice });
-            return { success: true, id: res.rows[0].id };
-        } catch (e) {
-            return { success: false, message: e.message };
-        }
-    }
-
-    async deleteAlert(id, user = {}) {
-        try {
-            await this.pool.query('DELETE FROM price_alerts WHERE id = $1', [id]);
-            await this.logAction(user.id, user.username, 'DELETE', 'alert', id, {});
-            return { success: true };
-        } catch (e) {
-            return { success: false, message: e.message };
-        }
-    }
-
-    async getTriggeredAlerts() {
-        const res = await this.pool.query(`
-            SELECT a.id as alert_id, pr.name as product_name,
-                   a.min_price as threshold_min, a.max_price as threshold_max,
-                   p.price, TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date,
-                   s.name as supplier_name, s.location as supplier_location,
-                   CASE
-                       WHEN a.min_price IS NOT NULL AND p.price < a.min_price THEN 'BELOW_MIN'
-                       WHEN a.max_price IS NOT NULL AND p.price > a.max_price THEN 'ABOVE_MAX'
-                   END as alert_type
-            FROM price_alerts a
-            JOIN products pr ON a.product_id = pr.id
-            JOIN prices p ON p.product_id = a.product_id
-            JOIN suppliers s ON p.supplier_id = s.id
-            WHERE p.entry_date >= CURRENT_DATE - INTERVAL '7 days'
-              AND (
-                  (a.min_price IS NOT NULL AND p.price < a.min_price) OR
-                  (a.max_price IS NOT NULL AND p.price > a.max_price)
-              )
-            ORDER BY p.entry_date DESC, p.price DESC
-            LIMIT 50
-        `);
-        return res.rows;
-    }
-
-    // ==========================================
-    // Search
-    // ==========================================
-    async search(query) {
-        const term = `%${query}%`;
-
-        const products = await this.pool.query(
-            `SELECT id, name, 'product' as type FROM products WHERE name ILIKE $1 LIMIT 10`,
-            [term]
-        );
-
-        const suppliers = await this.pool.query(
-            `SELECT id, name, location, 'supplier' as type FROM suppliers WHERE name ILIKE $1 OR location ILIKE $1 LIMIT 10`,
-            [term]
-        );
-
-        const prices = await this.pool.query(
-            `SELECT p.id, pr.name as product_name, s.name as supplier_name, p.price,
-                    TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date, 'price' as type
-             FROM prices p
-             JOIN products pr ON p.product_id = pr.id
-             JOIN suppliers s ON p.supplier_id = s.id
-             WHERE pr.name ILIKE $1 OR s.name ILIKE $1
-             ORDER BY p.entry_date DESC
-             LIMIT 10`,
-            [term]
-        );
-
-        return {
-            products: products.rows,
-            suppliers: suppliers.rows,
-            prices: prices.rows
-        };
-    }
-
-    // ==========================================
-    // Users
-    // ==========================================
-    async userLogin(username, password) {
-        const hashedPassword = this.hashPassword(password);
-        const res = await this.pool.query(
-            'SELECT id, username, role FROM users WHERE username = $1 AND password = $2',
-            [username, hashedPassword]
-        );
-
-        if (res.rows.length > 0) {
-            return { success: true, user: res.rows[0] };
-        }
-        return { success: false, message: 'Invalid credentials' };
-    }
-
-    async getEntriesByDate(date, page = 1, limit = 20) {
-        let whereClause = '';
-        const baseParams = [];
+    async getEntriesByDate(date, page = 1, limit = 20, companyId) {
+        let whereClause = 'WHERE p.company_id = $1';
+        const baseParams = [companyId];
 
         if (date && date.trim() !== '') {
             const cleanDate = date.trim();
-            whereClause = 'WHERE p.entry_date = $1';
+            whereClause += ' AND p.entry_date = $2';
             baseParams.push(cleanDate);
         } else {
-            // Default to today if no date specified
             const today = new Date().toISOString().split('T')[0];
-            whereClause = 'WHERE p.entry_date = $1';
+            whereClause += ' AND p.entry_date = $2';
             baseParams.push(today);
         }
 
-        // Get total count
         const countSql = `SELECT COUNT(*) as count FROM prices p ${whereClause}`;
         const countResult = await this.pool.query(countSql, baseParams);
         const total = parseInt(countResult.rows[0].count, 10);
 
-        // Get data
         let sql = `
             SELECT p.id, p.price, TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date, p.product_id, p.supplier_id,
                    pr.name as product_name,
@@ -675,25 +696,22 @@ class AppDatabase {
         };
     }
 
-    async getPredictions(productId, daysToPredict = 7) {
-        // Fetch historical daily average prices for the product
+    async getPredictions(productId, daysToPredict = 7, companyId) {
         const sql = `
             SELECT entry_date, AVG(price) as avg_price
             FROM prices
-            WHERE product_id = $1
+            WHERE company_id = $1 AND product_id = $2
             GROUP BY entry_date
             ORDER BY entry_date ASC
             LIMIT 30
         `;
-        const res = await this.pool.query(sql, [productId]);
+        const res = await this.pool.query(sql, [companyId, productId]);
         const data = res.rows;
 
         if (data.length < 2) {
-            return { success: false, message: 'Not enough data to generate predictions.', historical: [], predictions: [] };
+            return { success: false, message: 'Not enough historical data in your company to generate predictions (at least 2 days of quotes needed).', historical: [], predictions: [] };
         }
 
-        // Prepare data for linear regression
-        // x = index (0 to n-1), y = avg_price
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
         const n = data.length;
 
@@ -710,7 +728,6 @@ class AppDatabase {
         const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
         const intercept = (sumY - slope * sumX) / n;
 
-        // Generate predictions for the next 'daysToPredict' days
         const predictions = [];
         const lastDate = new Date(data[n - 1].entry_date);
 
@@ -731,7 +748,6 @@ class AppDatabase {
             historical: data.map(d => {
                 let dateStr;
                 try {
-                    // Check if it's already a string or a Date object
                     dateStr = d.entry_date instanceof Date ? d.entry_date.toISOString().split('T')[0] : new Date(d.entry_date).toISOString().split('T')[0];
                 } catch(e) {
                     dateStr = d.entry_date;
@@ -742,6 +758,109 @@ class AppDatabase {
                 };
             }),
             predictions
+        };
+    }
+
+    // ==========================================
+    // Price Alerts (Scoped to Company)
+    // ==========================================
+    async getAlerts(companyId) {
+        const res = await this.pool.query(`
+            SELECT a.id, a.product_id, a.min_price, a.max_price,
+                   pr.name as product_name,
+                   TO_CHAR(a.created_at, 'YYYY-MM-DD HH24:MI') as created_at
+            FROM price_alerts a
+            JOIN products pr ON a.product_id = pr.id
+            WHERE a.company_id = $1
+            ORDER BY a.created_at DESC
+        `, [companyId]);
+        return res.rows;
+    }
+
+    async addAlert(productId, minPrice, maxPrice, user = {}) {
+        try {
+            const res = await this.pool.query(
+                'INSERT INTO price_alerts (company_id, product_id, min_price, max_price) VALUES ($1, $2, $3, $4) RETURNING id',
+                [user.company_id, productId, minPrice || null, maxPrice || null]
+            );
+            await this.logAction(user.id, user.username, 'CREATE', 'alert', res.rows[0].id, { productId, minPrice, maxPrice }, user.company_id);
+            return { success: true, id: res.rows[0].id };
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    }
+
+    async deleteAlert(id, user = {}) {
+        try {
+            const old = await this.pool.query('SELECT id FROM price_alerts WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            if (old.rows.length === 0) return { success: false, message: 'Alert not found' };
+
+            await this.pool.query('DELETE FROM price_alerts WHERE id = $1 AND company_id = $2', [id, user.company_id]);
+            await this.logAction(user.id, user.username, 'DELETE', 'alert', id, {}, user.company_id);
+            return { success: true };
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    }
+
+    async getTriggeredAlerts(companyId) {
+        const res = await this.pool.query(`
+            SELECT a.id as alert_id, pr.name as product_name,
+                   a.min_price as threshold_min, a.max_price as threshold_max,
+                   p.price, TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date,
+                   s.name as supplier_name, s.location as supplier_location,
+                   CASE
+                       WHEN a.min_price IS NOT NULL AND p.price < a.min_price THEN 'BELOW_MIN'
+                       WHEN a.max_price IS NOT NULL AND p.price > a.max_price THEN 'ABOVE_MAX'
+                   END as alert_type
+            FROM price_alerts a
+            JOIN products pr ON a.product_id = pr.id
+            JOIN prices p ON p.product_id = a.product_id
+            JOIN suppliers s ON p.supplier_id = s.id
+            WHERE a.company_id = $1 AND p.company_id = $1
+              AND p.entry_date >= CURRENT_DATE - INTERVAL '7 days'
+              AND (
+                  (a.min_price IS NOT NULL AND p.price < a.min_price) OR
+                  (a.max_price IS NOT NULL AND p.price > a.max_price)
+              )
+            ORDER BY p.entry_date DESC, p.price DESC
+            LIMIT 50
+        `, [companyId]);
+        return res.rows;
+    }
+
+    // ==========================================
+    // Search (Scoped to Company)
+    // ==========================================
+    async search(query, companyId) {
+        const term = `%${query}%`;
+
+        const products = await this.pool.query(
+            `SELECT id, name, 'product' as type FROM products WHERE company_id = $1 AND name ILIKE $2 LIMIT 10`,
+            [companyId, term]
+        );
+
+        const suppliers = await this.pool.query(
+            `SELECT id, name, location, 'supplier' as type FROM suppliers WHERE company_id = $1 AND (name ILIKE $2 OR location ILIKE $2) LIMIT 10`,
+            [companyId, term]
+        );
+
+        const prices = await this.pool.query(
+            `SELECT p.id, pr.name as product_name, s.name as supplier_name, p.price,
+                    TO_CHAR(p.entry_date, 'YYYY-MM-DD') as entry_date, 'price' as type
+             FROM prices p
+             JOIN products pr ON p.product_id = pr.id
+             JOIN suppliers s ON p.supplier_id = s.id
+             WHERE p.company_id = $1 AND (pr.name ILIKE $2 OR s.name ILIKE $2)
+             ORDER BY p.entry_date DESC
+             LIMIT 10`,
+            [companyId, term]
+        );
+
+        return {
+            products: products.rows,
+            suppliers: suppliers.rows,
+            prices: prices.rows
         };
     }
 }
