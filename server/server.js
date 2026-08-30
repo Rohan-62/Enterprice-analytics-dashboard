@@ -79,19 +79,13 @@ async function startServer() {
                 const result = await db.registerUser({ username, password, role, companyCode });
                 
                 if (result.success) {
-                    const token = jwt.sign(
-                        { 
-                            id: result.user.id, 
-                            username: result.user.username, 
-                            role: result.user.role, 
-                            company_id: result.user.company_id,
-                            company_name: result.user.company_name,
-                            company_code: result.user.company_code
-                        }, 
-                        process.env.JWT_SECRET || 'jwt_secret_price_tracker_key', 
-                        { expiresIn: '24h' }
-                    );
-                    res.json({ success: true, user: result.user, token });
+                    // Do NOT issue token because user requires company admin approval
+                    res.json({ 
+                        success: true, 
+                        pendingApproval: true, 
+                        message: result.message || 'Join request submitted! Please wait for your company administrator to admit your account.',
+                        user: result.user 
+                    });
                 } else {
                     res.status(400).json(result);
                 }
